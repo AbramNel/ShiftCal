@@ -1,1 +1,0 @@
-public enum ShiftTypeId { Empty, Day, Night, Off, Vacation, FillDay, FillNight }
