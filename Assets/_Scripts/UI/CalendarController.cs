@@ -107,8 +107,17 @@ namespace ShiftCal.UI
             Refresh();
 
             if (selectedDateKeys.Count == 1 && visibleDaysByKey.TryGetValue(dateKey, out CalendarDayData day))
+            {
                 dayDetailsPopup?.Show(day);
+                return;
+            }
 
+            ShowShiftPicker();
+        }
+
+        public void OpenShiftPickerForSelection()
+        {
+            dayDetailsPopup?.Hide();
             ShowShiftPicker();
         }
 

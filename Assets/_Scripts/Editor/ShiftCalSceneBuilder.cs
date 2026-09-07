@@ -26,6 +26,8 @@ public static class ShiftCalSceneBuilder
     private static readonly Color TextMuted = Hex("#94A3B8");
     private static readonly Color Border = Hex("#334155");
     private static readonly Color Card = Hex("#111827");
+    private static readonly Color CardSoft = Hex("#172033");
+    private static readonly Color Input = Hex("#1E293B");
 
     [MenuItem("ShiftCal/Build Permanent Calendar App")]
     public static void BuildPermanentCalendarApp()
@@ -48,12 +50,14 @@ public static class ShiftCalSceneBuilder
         Canvas canvas = CreateCanvas();
         GameObject uiRoot = CreatePanel("ShiftCal Permanent UI", canvas.transform, Background);
         Stretch(uiRoot.GetComponent<RectTransform>());
+        uiRoot.AddComponent<SafeAreaFitter>();
 
         GameObject loginScreen = CreateLoginScreen(uiRoot.transform);
         GameObject calendarScreen = CreateCalendarScreen(uiRoot.transform, dayCellPrefab);
         GameObject settingsScreen = CreateSettingsScreen(uiRoot.transform, shiftRowPrefab);
         GameObject profileScreen = CreateProfileScreen(uiRoot.transform);
 
+        calendarScreen.SetActive(false);
         settingsScreen.SetActive(false);
         profileScreen.SetActive(false);
 
@@ -80,25 +84,26 @@ public static class ShiftCalSceneBuilder
     {
         GameObject root = CreateUiRoot("CalendarDayCell");
         RectTransform rect = root.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(138, 174);
+        rect.sizeDelta = new Vector2(142, 194);
 
         Image background = root.AddComponent<Image>();
         background.color = Card;
         background.raycastTarget = true;
+        AddOutline(root, Border);
 
         CalendarDayCell cell = root.AddComponent<CalendarDayCell>();
 
-        Text day = CreateText("DayNumber", root.transform, "1", 34, TextDark, TextAnchor.UpperCenter, FontStyle.Bold);
-        SetRect(day.rectTransform, new Vector2(0, 52), new Vector2(126, 44));
+        Text day = CreateText("DayNumber", root.transform, "1", 32, Hex("#020617"), TextAnchor.UpperLeft, FontStyle.Bold);
+        AnchorStretch(day.rectTransform, 0, 1, 1, 1, 12, -50, -10, -8);
 
-        Text shift = CreateText("ShiftName", root.transform, "Day-12", 23, TextDark, TextAnchor.UpperCenter, FontStyle.Normal);
-        SetRect(shift.rectTransform, new Vector2(0, 5), new Vector2(126, 50));
+        Text shift = CreateText("ShiftName", root.transform, "Day-12", 22, Hex("#020617"), TextAnchor.MiddleLeft, FontStyle.Bold);
+        AnchorStretch(shift.rectTransform, 0, 0, 1, 1, 12, 62, -10, -58);
 
-        Text hours = CreateText("Hours", root.transform, "12h", 19, TextMuted, TextAnchor.UpperCenter, FontStyle.Bold);
-        SetRect(hours.rectTransform, new Vector2(0, -42), new Vector2(126, 30));
+        Text hours = CreateText("Hours", root.transform, "12h", 18, Hex("#0F172A"), TextAnchor.MiddleLeft, FontStyle.Bold);
+        AnchorStretch(hours.rectTransform, 0, 0, 1, 0, 12, 28, -10, 58);
 
-        Text note = CreateText("PersonOrNote", root.transform, "", 18, TextMuted, TextAnchor.UpperCenter, FontStyle.Normal);
-        SetRect(note.rectTransform, new Vector2(0, -70), new Vector2(126, 28));
+        Text note = CreateText("PersonOrNote", root.transform, "", 16, Hex("#334155"), TextAnchor.MiddleLeft, FontStyle.Normal);
+        AnchorStretch(note.rectTransform, 0, 0, 1, 0, 12, 8, -10, 32);
 
         Image selectedOutline = CreateImage("Selected Outline", root.transform, Hex("#60A5FA55"));
         Stretch(selectedOutline.rectTransform);
@@ -123,36 +128,37 @@ public static class ShiftCalSceneBuilder
     {
         GameObject root = CreateUiRoot("ShiftSettingRow");
         RectTransform rect = root.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(1016, 72);
+        rect.sizeDelta = new Vector2(972, 184);
 
         Image background = root.AddComponent<Image>();
-        background.color = Card;
+        background.color = CardSoft;
+        AddOutline(root, Border);
 
         ShiftSettingRow row = root.AddComponent<ShiftSettingRow>();
 
-        Text name = CreateText("NameLabel", root.transform, "Day-12", 20, TextMuted, TextAnchor.MiddleLeft, FontStyle.Bold);
-        SetRect(name.rectTransform, new Vector2(-424, 22), new Vector2(150, 28));
+        Text name = CreateText("NameLabel", root.transform, "Day-12", 22, TextDark, TextAnchor.MiddleLeft, FontStyle.Bold);
+        SetRect(name.rectTransform, new Vector2(-250, 68), new Vector2(340, 32));
         InputField nameInput = CreateInputField("Name Input", root.transform, "Shift name");
-        SetRect(nameInput.GetComponent<RectTransform>(), new Vector2(-344, -10), new Vector2(266, 46));
+        SetRect(nameInput.GetComponent<RectTransform>(), new Vector2(-250, 24), new Vector2(340, 58));
 
         Image swatch = CreateImage("ColorSwatch", root.transform, Hex("#FBBF24"));
-        SetRect(swatch.rectTransform, new Vector2(-170, 0), new Vector2(48, 48));
+        SetRect(swatch.rectTransform, new Vector2(-432, 24), new Vector2(68, 68));
         Button colorButton = swatch.gameObject.AddComponent<Button>();
         colorButton.targetGraphic = swatch;
         AddOutline(swatch.gameObject, Border);
 
         InputField startInput = CreateInputField("Start Time Input", root.transform, "Start");
-        SetRect(startInput.GetComponent<RectTransform>(), new Vector2(-50, 0), new Vector2(176, 46));
+        SetRect(startInput.GetComponent<RectTransform>(), new Vector2(-304, -52), new Vector2(230, 56));
         InputField endInput = CreateInputField("End Time Input", root.transform, "End");
-        SetRect(endInput.GetComponent<RectTransform>(), new Vector2(142, 0), new Vector2(176, 46));
+        SetRect(endInput.GetComponent<RectTransform>(), new Vector2(-52, -52), new Vector2(230, 56));
 
-        Text timeLabel = CreateText("TimeLabel", root.transform, "5:30 AM - 5:30 PM", 16, TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal);
-        SetRect(timeLabel.rectTransform, new Vector2(142, -36), new Vector2(360, 24));
-        Text hoursLabel = CreateText("HoursLabel", root.transform, "12h", 22, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
-        SetRect(hoursLabel.rectTransform, new Vector2(288, 0), new Vector2(82, 46));
+        Text timeLabel = CreateText("TimeLabel", root.transform, "5:30 AM - 5:30 PM", 18, TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal);
+        SetRect(timeLabel.rectTransform, new Vector2(158, -78), new Vector2(260, 28));
+        Text hoursLabel = CreateText("HoursLabel", root.transform, "12h", 25, Primary, TextAnchor.MiddleCenter, FontStyle.Bold);
+        SetRect(hoursLabel.rectTransform, new Vector2(158, -42), new Vector2(100, 54));
 
-        Button save = CreateButton("Save Shift Row", root.transform, "Save", new Vector2(388, 0), new Vector2(112, 48), Primary, Hex("#04111F"), 21);
-        Button delete = CreateButton("Delete Shift Row", root.transform, "Delete", new Vector2(502, 0), new Vector2(104, 48), Hex("#3A1722"), Danger, 20);
+        Button save = CreateButton("Save Shift Row", root.transform, "Save", new Vector2(365, 26), new Vector2(150, 62), Primary, Hex("#04111F"), 24);
+        Button delete = CreateButton("Delete Shift Row", root.transform, "Delete", new Vector2(365, -48), new Vector2(150, 58), Hex("#3A1722"), Danger, 22);
         Text saveLabel = save.GetComponentInChildren<Text>();
 
         UnityEventTools.AddPersistentListener(colorButton.onClick, row.CycleColor);
@@ -181,29 +187,35 @@ public static class ShiftCalSceneBuilder
     private static GameObject CreateLoginScreen(Transform parent)
     {
         GameObject screen = CreateScreen("Login Screen", parent);
-        CreateTopBar(screen.transform, "My Shift Calendar", false);
+        CreateTopBar(screen.transform, "ShiftCal", false);
 
-        Image logo = CreateImage("Logo", screen.transform, Primary);
-        SetRect(logo.rectTransform, new Vector2(0, 460), new Vector2(132, 132));
-        Text logoText = CreateText("Logo Text", logo.transform, "SHIFT\nCAL", 24, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+        RectTransform content = CreateVerticalGroup("Login Content", screen.transform, 28, 64, 64, 44, 44).GetComponent<RectTransform>();
+        AnchorStretch(content, 0, 0, 1, 1, 32, 120, -32, -210);
+        content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        Image logo = CreateImage("Logo", content, Primary);
+        AddLayoutElement(logo.gameObject, 144, 144);
+        Text logoText = CreateText("Logo Text", logo.transform, "SHIFT\nCAL", 24, Hex("#04111F"), TextAnchor.MiddleCenter, FontStyle.Bold);
         Stretch(logoText.rectTransform);
 
-        Text title = CreateText("Headline", screen.transform, "Sign in to your calendar", 42, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
-        SetRect(title.rectTransform, new Vector2(0, 270), new Vector2(900, 64));
+        Text title = CreateText("Headline", content, "Sign in to your calendar", 44, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+        AddLayoutElement(title.gameObject, -1, 70);
 
-        Text subtitle = CreateText("Subhead", screen.transform, "Use your Google account to sync shifts, protect your data, and share calendars.", 24, TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal);
-        SetRect(subtitle.rectTransform, new Vector2(0, 205), new Vector2(850, 70));
+        Text subtitle = CreateText("Subhead", content, "Google sign-in keeps your calendar private and ready to sync.", 25, TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal);
+        AddLayoutElement(subtitle.gameObject, -1, 86);
 
-        Button google = CreateButton("Google Sign In Button", screen.transform, "Continue with Google", new Vector2(0, 50), new Vector2(860, 96), Card, TextDark, 30);
+        Button google = CreateButton("Google Sign In Button", content, "Continue with Google", Vector2.zero, Vector2.zero, CardSoft, TextDark, 30);
         AddOutline(google.gameObject, Border);
         Text googleMark = CreateText("Google Mark", google.transform, "G", 32, Primary, TextAnchor.MiddleCenter, FontStyle.Bold);
-        SetRect(googleMark.rectTransform, new Vector2(-350, 0), new Vector2(54, 54));
+        AnchorStretch(googleMark.rectTransform, 0, 0, 0, 1, 28, 0, 86, 0);
+        AddLayoutElement(google.gameObject, -1, 96);
 
-        Text note = CreateText("Privacy Note", screen.transform, "No account, no calendar access. Firebase rules will restrict group data to members only.", 21, TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal);
-        SetRect(note.rectTransform, new Vector2(0, -72), new Vector2(860, 64));
+        Text note = CreateText("Privacy Note", content, "No account, no calendar access.", 22, TextMuted, TextAnchor.MiddleCenter, FontStyle.Normal);
+        AddLayoutElement(note.gameObject, -1, 54);
 
-        Button options = CreateButton("Options Button", screen.transform, "Options", new Vector2(0, -190), new Vector2(260, 64), Hex("#1E293B"), Primary, 24);
+        Button options = CreateButton("Options Button", content, "Options", Vector2.zero, Vector2.zero, Input, Primary, 24);
         AddOutline(options.gameObject, Border);
+        AddLayoutElement(options.gameObject, 280, 68);
 
         return screen;
     }
@@ -213,32 +225,51 @@ public static class ShiftCalSceneBuilder
         GameObject screen = CreateScreen("Calendar Screen", parent);
         CreateTopBar(screen.transform, "My Shift Calendar", true);
 
-        RectTransform toolbar = CreatePanel("Toolbar", screen.transform, Hex("#111827")).GetComponent<RectTransform>();
-        SetRect(toolbar, new Vector2(0, 707), new Vector2(1080, 90));
-        CreateText("Toolbar Text", toolbar, "Goto        Edit        Stats        Share", 24, Hex("#45698F"), TextAnchor.MiddleCenter, FontStyle.Normal);
+        RectTransform monthBar = CreateHorizontalGroup("Month Bar", screen.transform, 18, 28, 28, 18, 18).GetComponent<RectTransform>();
+        AnchorStretch(monthBar, 0, 1, 1, 1, 26, -308, -26, -190);
+        Image monthImage = monthBar.gameObject.AddComponent<Image>();
+        monthImage.color = CardSoft;
+        AddOutline(monthBar.gameObject, Border);
 
-        Button prev = CreateButton("Previous Month Button", screen.transform, "<", new Vector2(-455, 610), new Vector2(82, 70), Color.clear, TextDark, 42);
-        Button next = CreateButton("Next Month Button", screen.transform, ">", new Vector2(455, 610), new Vector2(82, 70), Color.clear, TextDark, 42);
-
-        Text month = CreateText("Month Label", screen.transform, "July 2026", 40, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
-        SetRect(month.rectTransform, new Vector2(0, 610), new Vector2(480, 70));
+        Button prev = CreateButton("Previous Month Button", monthBar, "<", Vector2.zero, Vector2.zero, Input, Primary, 42);
+        Text month = CreateText("Month Label", monthBar, "July 2026", 40, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Button next = CreateButton("Next Month Button", monthBar, ">", Vector2.zero, Vector2.zero, Input, Primary, 42);
+        AddLayoutElement(prev.gameObject, 92, 74);
+        AddLayoutElement(month.gameObject, 0, 74, 1);
+        AddLayoutElement(next.gameObject, 92, 74);
 
         string[] weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+        RectTransform weekdayRow = CreateHorizontalGroup("Weekday Row", screen.transform, 0, 30, 30, 0, 0).GetComponent<RectTransform>();
+        AnchorStretch(weekdayRow, 0, 1, 1, 1, 24, -368, -24, -318);
         for (int i = 0; i < weekdays.Length; i++)
         {
-            Text weekday = CreateText("Weekday " + weekdays[i], screen.transform, weekdays[i], 28, Hex("#374151"), TextAnchor.MiddleCenter, FontStyle.Normal);
-            SetRect(weekday.rectTransform, new Vector2(-441 + i * 147, 545), new Vector2(135, 46));
+            Text weekday = CreateText("Weekday " + weekdays[i], weekdayRow, weekdays[i], 24, TextMuted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            AddLayoutElement(weekday.gameObject, 0, -1, 1);
         }
 
         RectTransform grid = CreatePanel("Permanent Calendar Grid", screen.transform, Color.clear).GetComponent<RectTransform>();
-        SetRect(grid, new Vector2(0, -42), new Vector2(1030, 1120));
+        AnchorStretch(grid, 0, 0, 1, 1, 24, 238, -24, -376);
+        GridLayoutGroup gridLayout = grid.gameObject.AddComponent<GridLayoutGroup>();
+        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayout.constraintCount = 7;
+        gridLayout.spacing = new Vector2(4, 4);
+        gridLayout.cellSize = new Vector2(144, 202);
+        gridLayout.childAlignment = TextAnchor.UpperCenter;
 
         CalendarController controller = screen.AddComponent<CalendarController>();
-        DayDetailsPopup popup = CreateDayDetailsPopup(screen.transform);
+        DayDetailsPopup popup = CreateDayDetailsPopup(screen.transform, controller);
         GameObject shiftPickerPanel = CreateShiftPickerPanel(screen.transform, controller, out List<Button> shiftPickerButtons, out List<Text> shiftPickerLabels);
         GameObject repeatPanel = CreateRepeatPanel(screen.transform, controller);
         Text selectionLabel = CreateText("Selection Label", screen.transform, "Select days", 24, TextMuted, TextAnchor.MiddleCenter, FontStyle.Bold);
-        SetRect(selectionLabel.rectTransform, new Vector2(0, -858), new Vector2(500, 44));
+        AnchorStretch(selectionLabel.rectTransform, 0, 0, 1, 0, 32, 150, -32, 196);
+
+        RectTransform nav = CreateBottomNav(screen.transform).GetComponent<RectTransform>();
+        Button settingsNav = CreateButton("Calendar Settings Button", nav, "Settings", Vector2.zero, Vector2.zero, Input, Primary, 24);
+        Button profileNav = CreateButton("Calendar Profile Button", nav, "Profile", Vector2.zero, Vector2.zero, Input, Primary, 24);
+        Text calLabel = CreateText("Calendar Nav Label", nav, "Calendar", 24, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+        AddLayoutElement(calLabel.gameObject, 0, -1, 1);
+        AddLayoutElement(settingsNav.gameObject, 0, -1, 1);
+        AddLayoutElement(profileNav.gameObject, 0, -1, 1);
 
         List<CalendarDayCell> cells = new List<CalendarDayCell>(42);
         for (int row = 0; row < 6; row++)
@@ -247,8 +278,6 @@ public static class ShiftCalSceneBuilder
             {
                 GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(dayCellPrefab, grid);
                 instance.name = "Day Cell " + (row * 7 + col + 1).ToString("00");
-                SetRect(instance.GetComponent<RectTransform>(), new Vector2(-441 + col * 147, 455 - row * 182), new Vector2(138, 174));
-                AddOutline(instance, Border);
                 cells.Add(instance.GetComponent<CalendarDayCell>());
             }
         }
@@ -272,14 +301,17 @@ public static class ShiftCalSceneBuilder
         GameObject screen = CreateScreen("Settings Screen", parent);
         CreateTopBar(screen.transform, "Settings", false);
 
-        RectTransform content = CreateVerticalGroup("Settings Content", screen.transform, 24, 28, 28, 28, 18).GetComponent<RectTransform>();
-        AnchorStretch(content, 0, 0, 1, 1, 32, 130, -32, -210);
+        Button done = CreateButton("Settings Back Button", screen.transform, "Done", Vector2.zero, Vector2.zero, Color.clear, Primary, 25);
+        AnchorStretch(done.GetComponent<RectTransform>(), 1, 1, 1, 1, -190, -168, -28, -92);
 
-        Text header = CreateText("Shift Setting Title", content, "Shift Setting", 42, Primary, TextAnchor.MiddleLeft, FontStyle.Bold);
-        AddLayoutElement(header.gameObject, -1, 62);
+        RectTransform content = CreateScrollContent("Settings Scroll", screen.transform, 22, 30, 30, 26, 130, out _);
+        AnchorStretch(content.parent.parent.GetComponent<RectTransform>(), 0, 0, 1, 1, 24, 136, -24, -196);
 
-        Text shifts = CreateText("Shifts Label", content, "Shifts", 32, TextDark, TextAnchor.MiddleLeft, FontStyle.Bold);
-        AddLayoutElement(shifts.gameObject, -1, 44);
+        Text header = CreateText("Shift Setting Title", content, "Shift Settings", 40, Primary, TextAnchor.MiddleLeft, FontStyle.Bold);
+        AddLayoutElement(header.gameObject, -1, 58);
+
+        Text shifts = CreateText("Shifts Label", content, "Presets and custom shifts", 24, TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal);
+        AddLayoutElement(shifts.gameObject, -1, 42);
 
         ShiftSettingsController controller = screen.AddComponent<ShiftSettingsController>();
         List<ShiftSettingRow> rows = new List<ShiftSettingRow>();
@@ -287,13 +319,20 @@ public static class ShiftCalSceneBuilder
         {
             GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(shiftRowPrefab, content);
             instance.name = "Shift Row " + (i + 1).ToString("00");
-            AddOutline(instance, Border);
-            AddLayoutElement(instance, -1, 74);
+            AddLayoutElement(instance, -1, 184);
             rows.Add(instance.GetComponent<ShiftSettingRow>());
         }
 
         Text validation = CreateText("Settings Validation", screen.transform, "", 22, Danger, TextAnchor.MiddleCenter, FontStyle.Bold);
-        AnchorStretch(validation.rectTransform, 0, 0, 1, 0, 32, 54, -32, 98);
+        AnchorStretch(validation.rectTransform, 0, 0, 1, 0, 32, 110, -32, 148);
+
+        RectTransform nav = CreateBottomNav(screen.transform).GetComponent<RectTransform>();
+        Button calendarNav = CreateButton("Settings Calendar Button", nav, "Calendar", Vector2.zero, Vector2.zero, Input, Primary, 24);
+        Text settingsLabel = CreateText("Settings Nav Label", nav, "Settings", 24, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Button profileNav = CreateButton("Settings Profile Button", nav, "Profile", Vector2.zero, Vector2.zero, Input, Primary, 24);
+        AddLayoutElement(calendarNav.gameObject, 0, -1, 1);
+        AddLayoutElement(settingsLabel.gameObject, 0, -1, 1);
+        AddLayoutElement(profileNav.gameObject, 0, -1, 1);
 
         SetObjectList(controller, "rows", rows);
         SetObjectField(controller, "validationLabel", validation);
@@ -302,14 +341,15 @@ public static class ShiftCalSceneBuilder
 
     private static GameObject CreateShiftPickerPanel(Transform parent, CalendarController controller, out List<Button> buttons, out List<Text> labels)
     {
-        GameObject panel = CreatePanel("Shift Picker Panel", parent, Hex("#020617F2"));
+        GameObject panel = CreatePanel("Shift Picker Panel", parent, Hex("#020617F7"));
+        panel.GetComponent<Image>().raycastTarget = true;
         RectTransform rect = panel.GetComponent<RectTransform>();
-        AnchorStretch(rect, 0, 0, 1, 0, 24, 30, -24, 310);
+        AnchorStretch(rect, 0, 0, 1, 0, 20, 110, -20, 486);
         AddOutline(panel, Border);
 
         RectTransform header = CreateHorizontalGroup("Shift Picker Header", panel.transform, 18, 24, 24, 16, 6).GetComponent<RectTransform>();
-        AnchorStretch(header, 0, 1, 1, 1, 0, -76, 0, 0);
-        Text title = CreateText("Shift Picker Title", header, "Apply shift to selected days", 26, TextDark, TextAnchor.MiddleLeft, FontStyle.Bold);
+        AnchorStretch(header, 0, 1, 1, 1, 0, -86, 0, 0);
+        Text title = CreateText("Shift Picker Title", header, "Apply shift", 28, TextDark, TextAnchor.MiddleLeft, FontStyle.Bold);
         Button repeat = CreateButton("Repeat Selected Button", header, "Repeat", Vector2.zero, Vector2.zero, Accent, Hex("#03150F"), 23);
         Button close = CreateButton("Close Shift Picker", header, "Close", Vector2.zero, Vector2.zero, Hex("#1E293B"), Primary, 23);
         AddLayoutElement(title.gameObject, 0, -1, 1);
@@ -345,17 +385,18 @@ public static class ShiftCalSceneBuilder
     private static GameObject CreateRepeatPanel(Transform parent, CalendarController controller)
     {
         GameObject overlay = CreatePanel("Repeat Panel", parent, Hex("#000000AA"));
+        overlay.GetComponent<Image>().raycastTarget = true;
         Stretch(overlay.GetComponent<RectTransform>());
 
-        RectTransform card = CreateVerticalGroup("Repeat Card", overlay.transform, 16, 32, 32, 32, 32).GetComponent<RectTransform>();
-        SetRect(card, Vector2.zero, new Vector2(880, 560));
+        RectTransform card = CreateVerticalGroup("Repeat Card", overlay.transform, 16, 32, 32, 32, 36).GetComponent<RectTransform>();
+        AnchorStretch(card, 0, 0, 1, 0, 24, 24, -24, 760);
         Image cardImage = card.gameObject.AddComponent<Image>();
         cardImage.color = Card;
         AddOutline(card.gameObject, Border);
 
-        Text title = CreateText("Repeat Title", card, "Repeat selected pattern", 34, TextDark, TextAnchor.MiddleLeft, FontStyle.Bold);
+        Text title = CreateText("Repeat Title", card, "Repeat Pattern", 36, TextDark, TextAnchor.MiddleLeft, FontStyle.Bold);
         AddLayoutElement(title.gameObject, -1, 58);
-        Text note = CreateText("Repeat Note", card, "The selected date range becomes the pattern and repeats forward.", 24, TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal);
+        Text note = CreateText("Repeat Note", card, "Selected dates become the pattern.", 24, TextMuted, TextAnchor.MiddleLeft, FontStyle.Normal);
         AddLayoutElement(note.gameObject, -1, 58);
 
         Button one = CreateButton("Repeat 1 Month", card, "Repeat 1 Month", Vector2.zero, Vector2.zero, Hex("#1E293B"), TextDark, 25);
@@ -388,12 +429,15 @@ public static class ShiftCalSceneBuilder
         GameObject screen = CreateScreen("Profile Screen", parent);
         CreateTopBar(screen.transform, "Options", false);
 
-        RectTransform content = CreateVerticalGroup("Options Content", screen.transform, 28, 40, 40, 40, 22).GetComponent<RectTransform>();
-        AnchorStretch(content, 0, 0, 1, 1, 32, 150, -32, -120);
+        Button done = CreateButton("Profile Back Button", screen.transform, "Done", Vector2.zero, Vector2.zero, Color.clear, Primary, 25);
+        AnchorStretch(done.GetComponent<RectTransform>(), 1, 1, 1, 1, -190, -168, -28, -92);
+
+        RectTransform content = CreateScrollContent("Options Scroll", screen.transform, 26, 42, 42, 38, 120, out _);
+        AnchorStretch(content.parent.parent.GetComponent<RectTransform>(), 0, 0, 1, 1, 24, 136, -24, -196);
 
         Image avatar = CreateImage("Avatar", content, Primary);
         AddLayoutElement(avatar.gameObject, 150, 150);
-        Text avatarText = CreateText("Avatar Letter", avatar.transform, "G", 48, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Text avatarText = CreateText("Avatar Letter", avatar.transform, "G", 48, Hex("#04111F"), TextAnchor.MiddleCenter, FontStyle.Bold);
         Stretch(avatarText.rectTransform);
 
         Text account = CreateText("Account Label", content, "Google account", 36, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -419,16 +463,25 @@ public static class ShiftCalSceneBuilder
         AddLayoutElement(settings.gameObject, -1, 88);
         AddLayoutElement(logout.gameObject, -1, 88);
         AddLayoutElement(back.gameObject, -1, 76);
+
+        RectTransform nav = CreateBottomNav(screen.transform).GetComponent<RectTransform>();
+        Button calendarNav = CreateButton("Profile Calendar Button", nav, "Calendar", Vector2.zero, Vector2.zero, Input, Primary, 24);
+        Button settingsNav = CreateButton("Profile Settings Nav Button", nav, "Settings", Vector2.zero, Vector2.zero, Input, Primary, 24);
+        Text profileLabel = CreateText("Profile Nav Label", nav, "Profile", 24, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+        AddLayoutElement(calendarNav.gameObject, 0, -1, 1);
+        AddLayoutElement(settingsNav.gameObject, 0, -1, 1);
+        AddLayoutElement(profileLabel.gameObject, 0, -1, 1);
         return screen;
     }
 
-    private static DayDetailsPopup CreateDayDetailsPopup(Transform parent)
+    private static DayDetailsPopup CreateDayDetailsPopup(Transform parent, CalendarController controller)
     {
         GameObject overlay = CreatePanel("Day Details Popup", parent, Hex("#000000AA"));
+        overlay.GetComponent<Image>().raycastTarget = true;
         Stretch(overlay.GetComponent<RectTransform>());
 
-        RectTransform card = CreateVerticalGroup("Day Details Card", overlay.transform, 18, 34, 34, 34, 34).GetComponent<RectTransform>();
-        SetRect(card, Vector2.zero, new Vector2(880, 560));
+        RectTransform card = CreateVerticalGroup("Day Details Card", overlay.transform, 18, 34, 34, 34, 38).GetComponent<RectTransform>();
+        AnchorStretch(card, 0, 0, 1, 0, 24, 24, -24, 680);
         Image cardImage = card.gameObject.AddComponent<Image>();
         cardImage.color = Card;
         AddOutline(card.gameObject, Border);
@@ -450,8 +503,11 @@ public static class ShiftCalSceneBuilder
         Text hours = CreateText("Day Details Hours", card, "12h", 28, Primary, TextAnchor.MiddleLeft, FontStyle.Bold);
         AddLayoutElement(hours.gameObject, -1, 48);
 
-        Button close = CreateButton("Close Day Details", card, "Close", Vector2.zero, Vector2.zero, Primary, Hex("#04111F"), 28);
-        AddLayoutElement(close.gameObject, -1, 78);
+        Button change = CreateButton("Change Day Shift", card, "Change shift", Vector2.zero, Vector2.zero, Primary, Hex("#04111F"), 28);
+        Button close = CreateButton("Close Day Details", card, "Close", Vector2.zero, Vector2.zero, Hex("#1E293B"), Primary, 28);
+        AddLayoutElement(change.gameObject, -1, 78);
+        AddLayoutElement(close.gameObject, -1, 72);
+        UnityEventTools.AddPersistentListener(change.onClick, controller.OpenShiftPickerForSelection);
         UnityEventTools.AddPersistentListener(close.onClick, popup.Hide);
 
         SetObjectField(popup, "panel", overlay);
@@ -475,7 +531,7 @@ public static class ShiftCalSceneBuilder
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(DesignWidth, DesignHeight);
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 0f;
+        scaler.matchWidthOrHeight = 0.72f;
         return canvas;
     }
 
@@ -504,16 +560,20 @@ public static class ShiftCalSceneBuilder
     private static void CreateTopBar(Transform parent, string title, bool includeMenu)
     {
         RectTransform status = CreatePanel("Status Bar", parent, Hex("#050505")).GetComponent<RectTransform>();
-        SetRect(status, new Vector2(0, 914), new Vector2(1080, 92));
-        CreateText("Status Text", status, "11:29      5G      90%", 24, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+        AnchorStretch(status, 0, 1, 1, 1, 0, -78, 0, 0);
+        Text statusText = CreateText("Status Text", status, "11:29      5G      90%", 22, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+        Stretch(statusText.rectTransform);
 
         RectTransform bar = CreatePanel("Top App Bar", parent, Header).GetComponent<RectTransform>();
-        SetRect(bar, new Vector2(0, 825), new Vector2(1080, 88));
-        Text label = CreateText("Top Bar Title", bar, title, 32, Color.white, TextAnchor.MiddleLeft, FontStyle.Normal);
-        SetRect(label.rectTransform, new Vector2(-325, 0), new Vector2(600, 70));
+        AnchorStretch(bar, 0, 1, 1, 1, 0, -188, 0, -78);
+        Text label = CreateText("Top Bar Title", bar, title, 34, Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
+        AnchorStretch(label.rectTransform, 0, 0, 1, 1, 42, 0, -230, 0);
 
         if (includeMenu)
-            CreateButton("Menu Button", bar, "Profile", new Vector2(425, 0), new Vector2(150, 62), Color.clear, Color.white, 25);
+        {
+            Button menu = CreateButton("Menu Button", bar, "Profile", Vector2.zero, Vector2.zero, Color.clear, Primary, 25);
+            AnchorStretch(menu.GetComponent<RectTransform>(), 1, 0, 1, 1, -190, 18, -24, -18);
+        }
     }
 
     private static GameObject CreateScreen(string name, Transform parent)
@@ -587,7 +647,7 @@ public static class ShiftCalSceneBuilder
         GameObject inputObject = CreateUiRoot(name);
         inputObject.transform.SetParent(parent, false);
         Image background = inputObject.AddComponent<Image>();
-        background.color = Hex("#1E293B");
+        background.color = Input;
         AddOutline(inputObject, Border);
 
         InputField input = inputObject.AddComponent<InputField>();
@@ -603,6 +663,54 @@ public static class ShiftCalSceneBuilder
         input.textComponent = text;
         input.placeholder = placeholder;
         return input;
+    }
+
+    private static RectTransform CreateScrollContent(string name, Transform parent, float spacing, int left, int right, int top, int bottom, out ScrollRect scrollRect)
+    {
+        GameObject scroll = CreateUiRoot(name);
+        scroll.transform.SetParent(parent, false);
+        Image scrollImage = scroll.AddComponent<Image>();
+        scrollImage.color = Color.clear;
+        scrollImage.raycastTarget = true;
+
+        scrollRect = scroll.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.scrollSensitivity = 36f;
+
+        GameObject viewport = CreateUiRoot(name + " Viewport");
+        viewport.transform.SetParent(scroll.transform, false);
+        Image viewportImage = viewport.AddComponent<Image>();
+        viewportImage.color = Color.clear;
+        viewportImage.raycastTarget = true;
+        Mask mask = viewport.AddComponent<Mask>();
+        mask.showMaskGraphic = false;
+        Stretch(viewport.GetComponent<RectTransform>());
+
+        GameObject content = CreateVerticalGroup(name + " Content", viewport.transform, spacing, left, right, top, bottom);
+        RectTransform contentRect = content.GetComponent<RectTransform>();
+        contentRect.anchorMin = new Vector2(0, 1);
+        contentRect.anchorMax = new Vector2(1, 1);
+        contentRect.pivot = new Vector2(0.5f, 1);
+        contentRect.offsetMin = Vector2.zero;
+        contentRect.offsetMax = Vector2.zero;
+        content.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        scrollRect.viewport = viewport.GetComponent<RectTransform>();
+        scrollRect.content = contentRect;
+        return contentRect;
+    }
+
+    private static GameObject CreateBottomNav(Transform parent)
+    {
+        GameObject nav = CreateHorizontalGroup("Bottom Navigation", parent, 16, 24, 24, 18, 18);
+        RectTransform rect = nav.GetComponent<RectTransform>();
+        AnchorStretch(rect, 0, 0, 1, 0, 0, 0, 0, 112);
+        Image image = nav.AddComponent<Image>();
+        image.color = Header;
+        AddOutline(nav, Hex("#0B1120"));
+        return nav;
     }
 
     private static Button CreateColorButton(string name, Transform parent, string colorHex)
@@ -718,7 +826,15 @@ public static class ShiftCalSceneBuilder
         BindButton("Options Button", navigation.ShowProfile);
         BindButton("Menu Button", navigation.ShowProfile);
         BindButton("Back Button", navigation.ShowCalendar);
+        BindButton("Settings Back Button", navigation.ShowCalendar);
+        BindButton("Profile Back Button", navigation.ShowCalendar);
         BindButton("Profile Settings Button", navigation.ShowSettings);
+        BindButton("Calendar Settings Button", navigation.ShowSettings);
+        BindButton("Calendar Profile Button", navigation.ShowProfile);
+        BindButton("Settings Calendar Button", navigation.ShowCalendar);
+        BindButton("Settings Profile Button", navigation.ShowProfile);
+        BindButton("Profile Calendar Button", navigation.ShowCalendar);
+        BindButton("Profile Settings Nav Button", navigation.ShowSettings);
         BindButton("Logout Button", navigation.OnLogoutPressed);
     }
 
