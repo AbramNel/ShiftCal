@@ -20,6 +20,7 @@ namespace ShiftCal.Firebase
 
         public bool Ready { get; private set; }
         public bool FirebaseEnabled { get; private set; }
+        public string ConfigurationError { get; private set; }
 
         private void Awake()
         {
@@ -29,18 +30,19 @@ namespace ShiftCal.Firebase
 
 #if SHIFT_CAL_USE_FIREBASE
             FirebaseEnabled = true;
+            var config=Resources.Load<ShiftCal.App.ShiftCalConfig>("ShiftCalConfig");
+            if(config==null||string.IsNullOrEmpty(config.webClientId)) { ConfigurationError="Google/Firebase setup required: set the Web/server OAuth client ID in Resources/ShiftCalConfig.";return; }
             FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
             {
-                if (task.Result == DependencyStatus.Available)
+                if (!task.IsFaulted && !task.IsCanceled && task.Result == DependencyStatus.Available)
                 {
-                    Auth = FirebaseAuth.DefaultInstance;
-                    DB = FirebaseFirestore.DefaultInstance;
-                    Ready = true;
-                    Debug.Log("Firebase Ready");
+                    try{Auth = FirebaseAuth.DefaultInstance;DB = FirebaseFirestore.DefaultInstance;Ready = true;Debug.Log("Firebase Ready");}
+                    catch(System.Exception ex){ConfigurationError="Firebase configuration required: "+ex.Message;}
                 }
                 else
                 {
-                    Debug.LogError("Firebase Failed: " + task.Result);
+                    ConfigurationError="Firebase initialization failed. Check ShiftCal's google-services.json and dependencies.";
+                    Debug.LogError("Firebase initialization failed. Local calendar remains available.");
                 }
             });
 #else

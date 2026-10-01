@@ -18,6 +18,7 @@ namespace ShiftCal.UI
         [SerializeField] private Button saveButton;
         [SerializeField] private Button deleteButton;
         [SerializeField] private Text saveButtonLabel;
+        [SerializeField] private InputField colorInput;
 
         private ShiftSettingsController controller;
         private ShiftTypeDefinitionData definition;
@@ -41,6 +42,7 @@ namespace ShiftCal.UI
             SetInput(nameInput, shiftDefinition != null ? shiftDefinition.name : string.Empty);
             SetInput(startTimeInput, shiftDefinition != null ? shiftDefinition.startTime : string.Empty);
             SetInput(endTimeInput, shiftDefinition != null ? shiftDefinition.endTime : string.Empty);
+            SetInput(colorInput,colorHex);
 
             if (uiNameLabel != null)
                 uiNameLabel.text = addRow ? "New shift" : shiftDefinition.name;
@@ -66,10 +68,12 @@ namespace ShiftCal.UI
 
             if (uiColorSwatch != null)
                 uiColorSwatch.color = ShiftStyleUtility.ToColor(colorHex);
+            SetInput(colorInput,colorHex);
         }
 
         public void Save()
         {
+            if(colorInput!=null){if(!ColorUtility.TryParseHtmlString(colorInput.text,out _)){controller.InvalidColor();return;}colorHex=colorInput.text;}
             string title = nameInput != null ? nameInput.text.Trim() : string.Empty;
             string start = startTimeInput != null ? startTimeInput.text.Trim() : string.Empty;
             string end = endTimeInput != null ? endTimeInput.text.Trim() : string.Empty;

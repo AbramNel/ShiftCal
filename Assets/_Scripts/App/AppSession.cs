@@ -8,12 +8,15 @@ namespace ShiftCal.App
 {
     public class AppSession : MonoBehaviour
     {
-        private const string LocalSaveKey = "ShiftCal.LocalCalendar.v1";
-
         public static AppSession Instance;
 
         public GroupData CurrentGroup;
         public readonly Dictionary<string, DayOverrideData> CalendarOverrides = new Dictionary<string, DayOverrideData>();
+        public ScheduleSave Data { get; private set; }
+        public event Action Changed;
+        public string Error { get; private set; }
+        private bool loaded;
+        private bool alarmsActive;
 
         private void Awake()
         {
@@ -21,123 +24,93 @@ namespace ShiftCal.App
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            if (!HasUsableDefaults(CurrentGroup))
+            if (CurrentGroup == null)
                 CurrentGroup = CreateDefaultGroup();
 
-            LoadLocal();
-            EnsureUsableGroup();
+            SwitchAccount(PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3","local"),PlayerPrefs.HasKey("ShiftCal.ActiveAccount.v3"));
         }
 
         public void SaveLocal()
         {
-            LocalCalendarSaveData data = new LocalCalendarSaveData
+            if (!loaded) return;
+            try
             {
-                group = CurrentGroup,
-                overrides = new List<DayOverrideData>(CalendarOverrides.Values)
-            };
-
-            PlayerPrefs.SetString(LocalSaveKey, JsonUtility.ToJson(data));
-            PlayerPrefs.Save();
+                Data.group = CurrentGroup;
+                Data.overrides = new List<DayOverrideData>(CalendarOverrides.Values);
+                Firebase.FirestoreService.Instance?.TrackChanges(Data);
+                ScheduleStorage.Write(Data);
+                if(alarmsActive)AndroidBridge.Save(Data);
+                Error = "";
+                Changed?.Invoke();
+                Firebase.FirestoreService.Instance?.Flush();
+            }
+            catch (Exception ex) { Error = "Save failed; previous save retained: " + ex.Message; Debug.LogError(Error); }
         }
 
-        private void LoadLocal()
+        public void SwitchAccount(string account, bool activate = true)
         {
-            if (!PlayerPrefs.HasKey(LocalSaveKey))
-                return;
-
-            string json = PlayerPrefs.GetString(LocalSaveKey);
-            if (string.IsNullOrWhiteSpace(json))
-                return;
-
-            LocalCalendarSaveData data = JsonUtility.FromJson<LocalCalendarSaveData>(json);
-            if (data == null)
-                return;
-
-            if (data.group != null)
-                CurrentGroup = data.group;
-
+            Firebase.FirestoreService.Instance?.StopListening();
+            AndroidBridge.Action("deactivate");
+            loaded = false;
+            alarmsActive = activate;
             CalendarOverrides.Clear();
-            if (data.overrides == null)
-                return;
-
-            foreach (DayOverrideData dayOverride in data.overrides)
+            try
             {
-                if (dayOverride != null && !string.IsNullOrWhiteSpace(dayOverride.dateKey))
-                    CalendarOverrides[dayOverride.dateKey] = dayOverride;
+                Data = ScheduleStorage.Load(account, CreateDefaultGroup());
+                CurrentGroup = Data.group;
+                foreach (var o in Data.overrides) CalendarOverrides[o.dateKey] = o;
+                loaded = true; Error = "";
+                if(activate){PlayerPrefs.SetString("ShiftCal.ActiveAccount.v3",account);PlayerPrefs.Save();AndroidBridge.Save(Data);}
+                Changed?.Invoke();
+                Firebase.FirestoreService.Instance?.StartListening();
             }
+            catch (Exception ex) { Error = ex.Message; Data = new ScheduleSave { account = account, group = CreateDefaultGroup() }; CurrentGroup = Data.group; }
         }
 
-        private void EnsureUsableGroup()
+        public void ApplyRemote()
         {
-            GroupData defaults = CreateDefaultGroup();
-            if (!HasUsableDefaults(CurrentGroup))
-            {
-                CurrentGroup = defaults;
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(CurrentGroup.groupId))
-                CurrentGroup.groupId = defaults.groupId;
-            if (string.IsNullOrWhiteSpace(CurrentGroup.name))
-                CurrentGroup.name = defaults.name;
-            if (string.IsNullOrWhiteSpace(CurrentGroup.startDateKey))
-                CurrentGroup.startDateKey = defaults.startDateKey;
-            if (CurrentGroup.pattern == null || CurrentGroup.pattern.Count == 0)
-                CurrentGroup.pattern = defaults.pattern;
-            if (CurrentGroup.members == null)
-                CurrentGroup.members = new List<string>();
-            if (CurrentGroup.shiftTypes == null)
-                CurrentGroup.shiftTypes = new List<ShiftTypeDefinitionData>();
-
-            EnsurePreset(CurrentGroup.shiftTypes, defaults.shiftTypes, (int)ShiftTypeId.Off);
-            EnsurePreset(CurrentGroup.shiftTypes, defaults.shiftTypes, (int)ShiftTypeId.Day12);
+            CurrentGroup = Data.group;
+            CalendarOverrides.Clear();
+            foreach (var o in Data.overrides) CalendarOverrides[o.dateKey] = o;
+            ScheduleStorage.Write(Data);
+            if(alarmsActive)AndroidBridge.Save(Data);
+            Changed?.Invoke();
         }
-
-        private static bool HasUsableDefaults(GroupData group)
+        public void RestoreSnapshot(string json)
         {
-            return group != null && group.shiftTypes != null && group.shiftTypes.Count > 0;
+            Data=JsonUtility.FromJson<ScheduleSave>(json);CurrentGroup=Data.group;CalendarOverrides.Clear();foreach(var o in Data.overrides)CalendarOverrides[o.dateKey]=o;Changed?.Invoke();
         }
 
-        private static void EnsurePreset(List<ShiftTypeDefinitionData> target, List<ShiftTypeDefinitionData> defaults, int presetId)
+        public void ImportLocal()
         {
-            if (FindShift(target, presetId) != null)
-                return;
-
-            ShiftTypeDefinitionData preset = FindShift(defaults, presetId);
-            if (preset == null)
-                return;
-
-            target.Add(new ShiftTypeDefinitionData
-            {
-                id = preset.id,
-                name = preset.name,
-                colorHex = preset.colorHex,
-                startTime = preset.startTime,
-                endTime = preset.endTime,
-                hours = preset.hours
-            });
+            if (Data.account == "local" || Data.group.groupId != "local-default") return;
+            var local = ScheduleStorage.Load("local", CreateDefaultGroup());
+            Data.group = JsonUtility.FromJson<GroupData>(JsonUtility.ToJson(local.group));
+            Data.overrides = local.overrides;
+            Data.events = local.events; Data.exceptions = local.exceptions; Data.rules = local.rules;
+            ApplyRemote(); SaveLocal();
         }
 
-        private static ShiftTypeDefinitionData FindShift(List<ShiftTypeDefinitionData> shifts, int id)
+        private void OnApplicationPause(bool paused) { if (!paused && loaded) { AndroidBridge.Action("reconcile"); Firebase.FirestoreService.Instance?.Flush(); Changed?.Invoke(); } }
+        private void OnApplicationFocus(bool focused) { if(focused&&loaded&&alarmsActive){AndroidBridge.Action("reconcile");Changed?.Invoke();} }
+
+        public void SetShift(string dateKey, int shift)
         {
-            if (shifts == null)
-                return null;
-
-            foreach (ShiftTypeDefinitionData shift in shifts)
-            {
-                if (shift != null && shift.id == id)
-                    return shift;
-            }
-
-            return null;
+            DateKeyUtility.FromDateKey(dateKey);
+            if (!CalendarOverrides.TryGetValue(dateKey, out var o)) o = new DayOverrideData { dateKey = dateKey };
+            o.shiftType = shift; o.updatedAt = DateKeyUtility.UnixMsNow();
+            o.scheduledShift=false;
+            o.userId = Data.account;
+            CalendarOverrides[dateKey] = o;
         }
 
-        [Serializable]
-        private class LocalCalendarSaveData
+        public bool CanDeleteShift(int id, out string reason)
         {
-            public GroupData group;
-            public List<DayOverrideData> overrides = new List<DayOverrideData>();
+            bool used = CurrentGroup.pattern.Contains(id) || new List<DayOverrideData>(CalendarOverrides.Values).Exists(o => o.shiftType == id) || Data.rules.Exists(r => r.shiftType == id);
+            reason = used ? "This shift is used by a rotation, date override or alarm rule. Replace those uses before deleting it." : "";
+            return !used;
         }
+
 
         private static GroupData CreateDefaultGroup()
         {

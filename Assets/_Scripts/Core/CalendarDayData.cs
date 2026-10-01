@@ -18,6 +18,7 @@ namespace ShiftCal.Core
         public string startTime;
         public string endTime;
         public float hours;
+        public int eventCount;
 
         public int ResolvedShift => hasOverride ? overrideShift : baseShift;
     }

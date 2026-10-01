@@ -15,8 +15,8 @@ namespace ShiftCal.Core
         {
             hours = 0f;
 
-            if (string.IsNullOrWhiteSpace(startTime) || string.IsNullOrWhiteSpace(endTime))
-                return true;
+            if (string.IsNullOrWhiteSpace(startTime) && string.IsNullOrWhiteSpace(endTime)) return true;
+            if (string.IsNullOrWhiteSpace(startTime) || string.IsNullOrWhiteSpace(endTime)) return false;
 
             if (!TryParseTime(startTime, out TimeSpan start) || !TryParseTime(endTime, out TimeSpan end))
                 return false;
@@ -34,9 +34,10 @@ namespace ShiftCal.Core
             return hours <= 0f ? string.Empty : hours.ToString("0.##", CultureInfo.InvariantCulture) + "h";
         }
 
-        private static bool TryParseTime(string value, out TimeSpan time)
+        public static bool TryParseTime(string value, out TimeSpan time)
         {
             time = default;
+            if (string.IsNullOrWhiteSpace(value)) return false;
             string normalized = value.Trim().Replace(".", string.Empty).ToUpperInvariant();
             normalized = normalized.Replace("AM", " AM").Replace("PM", " PM");
             normalized = normalized.Replace("  ", " ");
@@ -48,12 +49,6 @@ namespace ShiftCal.Core
                     time = parsed.TimeOfDay;
                     return true;
                 }
-            }
-
-            if (DateTime.TryParse(normalized, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out DateTime fallback))
-            {
-                time = fallback.TimeOfDay;
-                return true;
             }
 
             return false;

@@ -1,0 +1,5 @@
+pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+rootProject.name = 'ShiftCalNativeChecks'
+include ':native'
+project(':native').projectDir = file('../../Assets/Plugins/Android/ShiftCal.androidlib')

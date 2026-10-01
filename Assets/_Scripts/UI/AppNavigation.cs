@@ -21,12 +21,13 @@ namespace ShiftCal.UI
 
             ShiftCal.Firebase.AuthService.Instance.RefreshExistingSignIn();
 
-            if (ShiftCal.Firebase.AuthService.Instance.IsSignedIn && loginScreen != null && loginScreen.activeSelf)
+            if ((ShiftCal.Firebase.AuthService.Instance.IsSignedIn || ShiftCal.Firebase.AuthService.Instance.LocalMode || ShiftCal.Firebase.AuthService.Instance.HasCachedAccess) && loginScreen != null && loginScreen.activeSelf)
                 ShowCalendar();
         }
 
         public void ShowLogin()
         {
+            Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include)?.Hide();
             SetScreen(loginScreen, true);
             SetScreen(calendarScreen, false);
             SetScreen(settingsScreen, false);
@@ -35,6 +36,7 @@ namespace ShiftCal.UI
 
         public void ShowCalendar()
         {
+            Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include)?.Hide();
             SetScreen(loginScreen, false);
             SetScreen(calendarScreen, true);
             SetScreen(settingsScreen, false);
@@ -43,6 +45,7 @@ namespace ShiftCal.UI
 
         public void ShowSettings()
         {
+            Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include)?.Hide();
             SetScreen(loginScreen, false);
             SetScreen(calendarScreen, false);
             SetScreen(settingsScreen, true);
@@ -51,6 +54,7 @@ namespace ShiftCal.UI
 
         public void ShowProfile()
         {
+            Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include)?.Hide();
             SetScreen(loginScreen, false);
             SetScreen(calendarScreen, false);
             SetScreen(settingsScreen, false);
@@ -73,6 +77,8 @@ namespace ShiftCal.UI
             if (ShiftCal.Firebase.AuthService.Instance != null)
                 ShiftCal.Firebase.AuthService.Instance.SignOut();
 
+            ShiftCal.App.AppSession.Instance.SwitchAccount("local",false);
+            ShiftCal.App.AndroidBridge.Action("deactivate");
             ShowLogin();
         }
 
@@ -81,5 +87,6 @@ namespace ShiftCal.UI
             if (screen != null)
                 screen.SetActive(visible);
         }
+        public void OnLocalPressed() { ShiftCal.Firebase.AuthService.Instance.UseLocal(); ShowCalendar(); }
     }
 }

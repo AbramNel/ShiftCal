@@ -1,0 +1,5 @@
+-keep class com.abramnel.shiftcal.NativeBridge { public static *; }
+-keep class com.abramnel.shiftcal.AlarmReceiver { *; }
+-keep class com.abramnel.shiftcal.RestoreReceiver { *; }
+-keep class com.abramnel.shiftcal.AlarmActivity { *; }
+-keep class com.abramnel.shiftcal.RingingService { *; }

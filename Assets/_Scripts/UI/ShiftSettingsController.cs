@@ -10,6 +10,11 @@ namespace ShiftCal.UI
     {
         [SerializeField] private List<ShiftSettingRow> rows = new List<ShiftSettingRow>();
         [SerializeField] private Text validationLabel;
+        [SerializeField] private ShiftSettingRow rowPrefab;
+        [SerializeField] private Transform rowContent;
+        [SerializeField] private RectTransform settingsScroll;
+        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; Refresh(); } }
+        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; }
 
         private void Start()
         {
@@ -19,8 +24,9 @@ namespace ShiftCal.UI
         public void Refresh()
         {
             GroupData group = ShiftCal.App.AppSession.Instance != null ? ShiftCal.App.AppSession.Instance.CurrentGroup : null;
-            List<ShiftTypeDefinitionData> shiftTypes = group != null ? group.shiftTypes : null;
+            List<ShiftTypeDefinitionData> shiftTypes = group != null ? group.shiftTypes.FindAll(x=>!x.retired) : null;
             int shiftCount = shiftTypes != null ? shiftTypes.Count : 0;
+            while (rows.Count < shiftCount + 1 && rowPrefab != null) rows.Add(Instantiate(rowPrefab, rowContent));
 
             for (int i = 0; i < rows.Count; i++)
             {
@@ -74,7 +80,8 @@ namespace ShiftCal.UI
             if (group == null || definition == null || definition.id < 100)
                 return;
 
-            group.shiftTypes.Remove(definition);
+            if (!App.AppSession.Instance.CanDeleteShift(definition.id, out string reason)) { SetValidation(reason); return; }
+            definition.retired=true;
             ShiftCal.App.AppSession.Instance?.SaveLocal();
             Refresh();
         }
@@ -82,7 +89,10 @@ namespace ShiftCal.UI
         private void SetValidation(string message)
         {
             if (validationLabel != null)
+            {
                 validationLabel.text = message;
+                if(settingsScroll!=null)settingsScroll.offsetMin=new Vector2(settingsScroll.offsetMin.x,string.IsNullOrEmpty(message)?136:340);
+            }
         }
 
         private static int GetNextShiftId(List<ShiftTypeDefinitionData> shiftTypes)
@@ -99,5 +109,6 @@ namespace ShiftCal.UI
 
             return next;
         }
+        public void InvalidColor()=>SetValidation("Use a hex color like #FBBF24.");
     }
 }

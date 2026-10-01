@@ -31,7 +31,7 @@ namespace ShiftCal.Core
 
                 if (overrides != null && overrides.TryGetValue(key, out DayOverrideData o))
                 {
-                    d.hasOverride = true;
+                    d.hasOverride = !o.scheduledShift;
                     d.overrideShift = o.shiftType;
                     d.personName = o.personName;
                     d.note = o.note;

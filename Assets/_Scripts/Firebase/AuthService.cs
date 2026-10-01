@@ -1,127 +1,86 @@
 using UnityEngine;
-
+using ShiftCal.App;
 #if SHIFT_CAL_USE_FIREBASE
-using Firebase.Extensions;
 using Firebase.Auth;
+using Firebase.Extensions;
 #endif
-
 namespace ShiftCal.Firebase
 {
     public class AuthService : MonoBehaviour
     {
         public static AuthService Instance;
-
         public bool IsSignedIn { get; private set; }
+        public bool LocalMode { get; private set; }
+        public bool HasCachedAccess => PlayerPrefs.HasKey("ShiftCal.ActiveAccount.v3");
         public string UserId { get; private set; }
         public string DisplayName { get; private set; }
-
-        private void Awake()
-        {
-            if (Instance != null) { Destroy(gameObject); return; }
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-        }
-
-        public void SignIn()
-        {
-            SignInWithGoogle();
-        }
-
+        public string Status { get; private set; } = "";
+        private bool busy;
+        private int generation;
+        private bool restored;
+        private void Awake(){if(Instance!=null){Destroy(this);return;}Instance=this;LocalMode=PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3")=="local";DisplayName=PlayerPrefs.GetString("ShiftCal.AccountLabel","On this device");}
+        public void SignIn()=>SignInWithGoogle();
+        public void UseLocal(){SignOut();LocalMode=true;DisplayName="On this device";AppSession.Instance.SwitchAccount("local");}
         public void SignInWithGoogle()
         {
-            if (FirebaseBootstrap.Instance == null || !FirebaseBootstrap.Instance.Ready)
-            {
-                Debug.LogWarning("Auth is not ready yet.");
-                return;
-            }
-
+            if(busy)return;
 #if SHIFT_CAL_USE_FIREBASE
-            var auth = FirebaseBootstrap.Instance.Auth;
-
-            if (auth.CurrentUser != null)
-            {
-                ApplyFirebaseUser(auth.CurrentUser);
-                Debug.Log("Already signed in with Google/Firebase");
-                return;
-            }
-
-            Debug.LogWarning("Google sign-in requires an Android Google Sign-In token provider. Use SignInWithGoogleTokens after the provider returns tokens.");
+            if(FirebaseBootstrap.Instance==null||!FirebaseBootstrap.Instance.Ready){Status=FirebaseBootstrap.Instance?.ConfigurationError??"Firebase is still initializing. Retry shortly.";return;}
+            var config=Resources.Load<ShiftCalConfig>("ShiftCalConfig");
+            if(config==null||string.IsNullOrWhiteSpace(config.webClientId)){Status="Set ShiftCal's Web/server OAuth client ID and google-services.json.";return;}
+            generation++;busy=true;Status="Choose your Google account";
+#if UNITY_ANDROID && !UNITY_EDITOR
+            string error=AndroidBridge.Call<string>("signIn",config.webClientId);if(!string.IsNullOrEmpty(error))OnGoogleError(error);
 #else
-#if UNITY_EDITOR
-            IsSignedIn = true;
-            UserId = "local-user";
-            DisplayName = "Local Google User";
-            Debug.LogWarning("Editor-only simulated Google sign-in as local-user. Real builds require Firebase/Google auth.");
-#else
-            Debug.LogError("Google sign-in is required. Firebase/Google auth is not configured for this build.");
+            OnGoogleError("Google account selection is available on Android. Use local mode in the Editor.");
 #endif
+#else
+            Status="Google/Firebase is not configured for ShiftCal. Use local mode or follow FIREBASE_SETUP.md.";
 #endif
         }
-
-        public void SignInWithGoogleTokens(string idToken, string accessToken)
+        [UnityEngine.Scripting.Preserve] public void OnGoogleToken(string token){if(busy)SignInWithGoogleTokens(token,null);}
+        [UnityEngine.Scripting.Preserve] public void OnGoogleError(string error){busy=false;Status=error;}
+        public void SignInWithGoogleTokens(string idToken,string accessToken)
         {
-            if (FirebaseBootstrap.Instance == null || !FirebaseBootstrap.Instance.Ready)
-            {
-                Debug.LogWarning("Auth is not ready yet.");
-                return;
-            }
-
 #if SHIFT_CAL_USE_FIREBASE
-            Credential credential = GoogleAuthProvider.GetCredential(idToken, accessToken);
-            FirebaseBootstrap.Instance.Auth.SignInWithCredentialAsync(credential).ContinueWithOnMainThread(task =>
-            {
-                if (task.IsFaulted || task.IsCanceled)
-                {
-                    Debug.LogError("Google auth failed: " + task.Exception);
-                    return;
-                }
-
-                ApplyFirebaseUser(task.Result);
-                Debug.Log("Signed in with Google: " + UserId);
+            if(!FirebaseBootstrap.Instance.Ready){OnGoogleError("Firebase is not ready.");return;}
+            int request=generation;
+            FirebaseBootstrap.Instance.Auth.SignInWithCredentialAsync(GoogleAuthProvider.GetCredential(idToken,accessToken)).ContinueWithOnMainThread(t=>{
+                if(request!=generation)return;
+                busy=false;if(t.IsCanceled||t.IsFaulted){Status="Sign-in failed. Retry: "+t.Exception?.GetBaseException().Message;return;}Apply(t.Result);
             });
 #else
-#if UNITY_EDITOR
-            IsSignedIn = true;
-            UserId = "local-user";
-            DisplayName = "Local Google User";
-            Debug.LogWarning("Editor-only simulated Google token sign-in as local-user. Real builds require Firebase/Google auth.");
-#else
-            Debug.LogError("Google sign-in is required. Firebase/Google auth is not configured for this build.");
-#endif
+            OnGoogleError("Firebase configuration required.");
 #endif
         }
-
         public void RefreshExistingSignIn()
         {
 #if SHIFT_CAL_USE_FIREBASE
-            if (FirebaseBootstrap.Instance == null || !FirebaseBootstrap.Instance.Ready || FirebaseBootstrap.Instance.Auth == null)
-                return;
-
-            if (FirebaseBootstrap.Instance.Auth.CurrentUser != null)
-                ApplyFirebaseUser(FirebaseBootstrap.Instance.Auth.CurrentUser);
+            if(restored||LocalMode||FirebaseBootstrap.Instance==null||!FirebaseBootstrap.Instance.Ready)return;
+            restored=true;
+            if(PlayerPrefs.GetInt("ShiftCal.CloudSignedOut",0)==1){FirebaseBootstrap.Instance.Auth.SignOut();return;}
+            if(FirebaseBootstrap.Instance.Auth.CurrentUser!=null)Apply(FirebaseBootstrap.Instance.Auth.CurrentUser);
 #endif
         }
-
         public void SignOut()
         {
+            generation++;
+            FirestoreService.Instance?.StopListening();AndroidBridge.Action("deactivate");AndroidBridge.Call<string>("signOut");
 #if SHIFT_CAL_USE_FIREBASE
-            if (FirebaseBootstrap.Instance != null && FirebaseBootstrap.Instance.Auth != null)
-                FirebaseBootstrap.Instance.Auth.SignOut();
+            FirebaseBootstrap.Instance?.Auth?.SignOut();
 #endif
-            IsSignedIn = false;
-            UserId = string.Empty;
-            DisplayName = string.Empty;
-            Debug.Log("Signed out.");
+            PlayerPrefs.DeleteKey("ShiftCal.ActiveAccount.v3");PlayerPrefs.DeleteKey("ShiftCal.AccountLabel");PlayerPrefs.Save();
+            PlayerPrefs.SetInt("ShiftCal.CloudSignedOut",1);PlayerPrefs.Save();
+            IsSignedIn=false;LocalMode=false;UserId="";DisplayName="";busy=false;restored=true;
         }
-
 #if SHIFT_CAL_USE_FIREBASE
-        private void ApplyFirebaseUser(FirebaseUser user)
-        {
-            if (user == null) return;
-
-            IsSignedIn = true;
-            UserId = user.UserId;
-            DisplayName = string.IsNullOrEmpty(user.DisplayName) ? user.Email : user.DisplayName;
+        private void Apply(FirebaseUser user){
+            bool google=false;foreach(var provider in user.ProviderData)if(provider.ProviderId=="google.com")google=true;
+            if(!google){FirebaseBootstrap.Instance.Auth.SignOut();Status="A Google account is required for cloud sign-in.";return;}
+            IsSignedIn=true;LocalMode=false;UserId=user.UserId;DisplayName=string.IsNullOrEmpty(user.DisplayName)?user.Email:user.DisplayName;
+            PlayerPrefs.DeleteKey("ShiftCal.CloudSignedOut");
+            PlayerPrefs.SetString("ShiftCal.AccountLabel",DisplayName);
+            Status="Signed in";AppSession.Instance.SwitchAccount(UserId);
         }
 #endif
     }

@@ -17,6 +17,12 @@ namespace ShiftCal.UI
         [SerializeField] private List<Text> shiftPickerLabels = new List<Text>();
         [SerializeField] private GameObject repeatPanel;
         [SerializeField] private Text selectionLabel;
+        [SerializeField] private Button shiftChoicePrefab;
+        [SerializeField] private Transform shiftChoiceContent;
+        private string selectionStart;
+        private string selectionEnd;
+        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
+        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; }
 
         public DateTime currentMonth;
 
@@ -64,6 +70,10 @@ namespace ShiftCal.UI
 
             GroupData group = ShiftCal.App.AppSession.Instance.CurrentGroup;
             List<CalendarDayData> days = CalendarGenerator.Generate(currentMonth, group, Overrides);
+            var eventCounts=new Dictionary<string,int>();
+            var save=App.AppSession.Instance.Data;
+            foreach(var e in save.events)foreach(var hit in RecurrenceEngine.EventDates(save,e,days[0].date,days[days.Count-1].date))eventCounts[hit.calendarDateKey]=eventCounts.TryGetValue(hit.calendarDateKey,out int n)?n+1:1;
+            foreach(var day in days)day.eventCount=eventCounts.TryGetValue(day.dateKey,out int n)?n:0;
             visibleDaysByKey.Clear();
 
             if (uiMonthLabel != null)
@@ -87,6 +97,7 @@ namespace ShiftCal.UI
         {
             isSelecting = true;
             selectedDateKeys.Clear();
+            selectionStart = selectionEnd = dateKey;
             selectedDateKeys.Add(dateKey);
             Refresh();
         }
@@ -96,14 +107,18 @@ namespace ShiftCal.UI
             if (!isSelecting)
                 return;
 
-            selectedDateKeys.Add(dateKey);
+            selectionEnd = dateKey;
+            selectedDateKeys.Clear();
+            DateTime a = DateKeyUtility.FromDateKey(selectionStart), b = DateKeyUtility.FromDateKey(dateKey);
+            if (a > b) { var t = a; a = b; b = t; }
+            for (var d = a; d <= b; d = d.AddDays(1)) selectedDateKeys.Add(DateKeyUtility.ToDateKey(d));
             Refresh();
         }
 
         public void EndDaySelection(string dateKey)
         {
             isSelecting = false;
-            selectedDateKeys.Add(dateKey);
+            dateKey = selectionEnd ?? dateKey;
             Refresh();
 
             if (selectedDateKeys.Count == 1 && visibleDaysByKey.TryGetValue(dateKey, out CalendarDayData day))
@@ -124,10 +139,10 @@ namespace ShiftCal.UI
         public void ApplyShiftByPickerIndex(int index)
         {
             GroupData group = ShiftCal.App.AppSession.Instance != null ? ShiftCal.App.AppSession.Instance.CurrentGroup : null;
-            if (group == null || group.shiftTypes == null || index < 0 || index >= group.shiftTypes.Count)
+            var choices=group?.shiftTypes?.FindAll(x=>!x.retired);
+            if (choices == null || index < 0 || index >= choices.Count)
                 return;
-
-            ApplyShiftToSelection(group.shiftTypes[index].id);
+            ApplyShiftToSelection(choices[index].id);
         }
 
         public void ApplyShiftToSelection(int shiftType)
@@ -137,12 +152,7 @@ namespace ShiftCal.UI
 
             foreach (string dateKey in selectedDateKeys)
             {
-                Overrides[dateKey] = new DayOverrideData
-                {
-                    dateKey = dateKey,
-                    shiftType = shiftType,
-                    updatedAt = DateKeyUtility.UnixMsNow()
-                };
+                App.AppSession.Instance.SetShift(dateKey, shiftType);
             }
 
             ShiftCal.App.AppSession.Instance?.SaveLocal();
@@ -195,12 +205,7 @@ namespace ShiftCal.UI
             {
                 int offset = (date - start).Days % patternLength;
                 string key = DateKeyUtility.ToDateKey(date);
-                Overrides[key] = new DayOverrideData
-                {
-                    dateKey = key,
-                    shiftType = pattern[offset],
-                    updatedAt = DateKeyUtility.UnixMsNow()
-                };
+                App.AppSession.Instance.SetShift(key, pattern[offset]);
             }
 
             ShiftCal.App.AppSession.Instance?.SaveLocal();
@@ -211,7 +216,7 @@ namespace ShiftCal.UI
 
         private int ResolveShiftForDate(string dateKey)
         {
-            if (Overrides.TryGetValue(dateKey, out DayOverrideData data))
+            if (Overrides.TryGetValue(dateKey, out DayOverrideData data) && !data.scheduledShift)
                 return data.shiftType;
 
             if (visibleDaysByKey.TryGetValue(dateKey, out CalendarDayData day))
@@ -224,10 +229,15 @@ namespace ShiftCal.UI
         private void ShowShiftPicker()
         {
             GroupData group = ShiftCal.App.AppSession.Instance != null ? ShiftCal.App.AppSession.Instance.CurrentGroup : null;
-            List<ShiftTypeDefinitionData> shiftTypes = group != null ? group.shiftTypes : null;
+            List<ShiftTypeDefinitionData> shiftTypes = group != null ? group.shiftTypes.FindAll(x=>!x.retired) : null;
 
             if (shiftPickerPanel != null)
                 shiftPickerPanel.SetActive(true);
+            while (shiftTypes != null && shiftPickerButtons.Count < shiftTypes.Count && shiftChoicePrefab != null)
+            {
+                var button = Instantiate(shiftChoicePrefab, shiftChoiceContent);
+                shiftPickerButtons.Add(button); shiftPickerLabels.Add(button.GetComponentInChildren<Text>());
+            }
 
             for (int i = 0; i < shiftPickerButtons.Count; i++)
             {
@@ -242,6 +252,8 @@ namespace ShiftCal.UI
 
                 if (i < shiftPickerLabels.Count && shiftPickerLabels[i] != null)
                     shiftPickerLabels[i].text = shiftTypes[i].name + " " + ShiftTimeUtility.FormatHours(shiftTypes[i].hours);
+                shiftPickerButtons[i].targetGraphic.color = ShiftStyleUtility.ToColor(shiftTypes[i].colorHex);
+                shiftPickerLabels[i].color = Color.black;
             }
         }
 
@@ -254,7 +266,7 @@ namespace ShiftCal.UI
         private void UpdateSelectionLabel()
         {
             if (selectionLabel != null)
-                selectionLabel.text = selectedDateKeys.Count == 0 ? "Select days" : selectedDateKeys.Count + " selected";
+                selectionLabel.text = !string.IsNullOrEmpty(App.AppSession.Instance?.Error) ? App.AppSession.Instance.Error : selectedDateKeys.Count == 0 ? "Select days" : selectedDateKeys.Count + " selected";
         }
     }
 }

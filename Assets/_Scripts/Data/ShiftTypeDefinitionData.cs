@@ -11,5 +11,6 @@ namespace ShiftCal.Data
         public string startTime;
         public string endTime;
         public float hours;
+        public bool retired;
     }
 }

@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace ShiftCal.UI
 {
-    public class CalendarDayCell : MonoBehaviour, IPointerDownHandler, IPointerEnterHandler, IPointerUpHandler
+    public class CalendarDayCell : MonoBehaviour, IPointerDownHandler, IPointerEnterHandler, IPointerUpHandler, IDragHandler, IBeginDragHandler, IEndDragHandler
     {
         [SerializeField] private Image uiBackground;
         [SerializeField] private Text uiDayNumberLabel;
@@ -32,7 +32,9 @@ namespace ShiftCal.UI
             gameObject.SetActive(true);
 
             Color shiftColor = ShiftStyleUtility.ToColor(day.shiftColorHex);
+            if(ThemeManager.IsDark)shiftColor=Color.Lerp(new Color(.08f,.10f,.12f),shiftColor,.3f);
             normalColor = day.isCurrentMonth ? shiftColor : Fade(shiftColor, 0.32f);
+            foreach(var text in new[]{uiDayNumberLabel,uiShiftNameLabel,uiHoursLabel,uiNoteLabel})if(text!=null)text.color=ThemeManager.IsDark?new Color(.94f,.95f,.96f):new Color(.04f,.07f,.09f);
 
             if (uiBackground != null)
                 uiBackground.color = normalColor;
@@ -47,7 +49,10 @@ namespace ShiftCal.UI
                 uiHoursLabel.text = ShiftTimeUtility.FormatHours(day.hours);
 
             if (uiNoteLabel != null)
-                uiNoteLabel.text = day.hasOverride && !string.IsNullOrWhiteSpace(day.note) ? day.note : string.Empty;
+            {
+                int count=day.eventCount;
+                uiNoteLabel.text = count>0?count+" event(s)":!string.IsNullOrWhiteSpace(day.personName) ? day.personName : day.note ?? "";
+            }
 
             SetSelected(false);
         }
@@ -83,6 +88,18 @@ namespace ShiftCal.UI
         {
             color.a = alpha;
             return color;
+        }
+        public void OnBeginDrag(PointerEventData eventData) { }
+        public void OnEndDrag(PointerEventData eventData) { }
+        public void OnDrag(PointerEventData eventData)
+        {
+            var hits = new System.Collections.Generic.List<RaycastResult>();
+            EventSystem.current.RaycastAll(eventData, hits);
+            foreach (var hit in hits)
+            {
+                var cell = hit.gameObject.GetComponentInParent<CalendarDayCell>();
+                if (cell != null && cell.day != null) { controller.ExtendDaySelection(cell.day.dateKey); break; }
+            }
         }
     }
 }

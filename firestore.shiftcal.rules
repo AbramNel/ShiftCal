@@ -1,0 +1,60 @@
+rules_version = '2';
+// Dedicated ShiftCal rules. Merge only /shiftcal/v1 into a shared project's rules.
+// Do not replace another application's rules with this standalone file.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function self(uid) { return signed() && request.auth.uid == uid; }
+    function owner(group) { return signed() && get(/databases/$(database)/documents/shiftcal/v1/groups/$(group)).data.owner == request.auth.uid; }
+    function member(group) { return signed() && exists(/databases/$(database)/documents/shiftcal/v1/groups/$(group)/members/$(request.auth.uid)); }
+    function validRecord() {
+      return request.resource.data.keys().hasOnly(['key','json','deleted','revision','author'])
+        && request.resource.data.key is string && request.resource.data.json is string
+        && request.resource.data.json.size() < 250000 && request.resource.data.deleted is bool
+        && request.resource.data.author == request.auth.uid && request.resource.data.revision is int;
+    }
+    match /shiftcal/v1 {
+      match /users/{uid}/records/{record} {
+        allow read: if self(uid);
+        allow create: if self(uid) && validRecord() && request.resource.data.key.matches('rule/.*') && request.resource.data.revision == 1;
+        allow update: if self(uid) && validRecord() && request.resource.data.key == resource.data.key && request.resource.data.revision == resource.data.revision + 1;
+        allow delete: if false;
+      }
+      match /users/{uid}/calendar/{record} {
+        allow read: if self(uid);
+        allow create: if self(uid) && validRecord() && request.resource.data.key.matches('(rotation|shift|override|event|exception)/.*') && request.resource.data.revision == 1;
+        allow update: if self(uid) && validRecord() && request.resource.data.key == resource.data.key && request.resource.data.revision == resource.data.revision + 1;
+        allow delete: if false;
+      }
+      match /groups/{group} {
+        allow create: if signed() && request.resource.data.keys().hasOnly(['name','owner']) && request.resource.data.owner == request.auth.uid && request.resource.data.name is string;
+        allow read: if member(group) || owner(group);
+        allow update: if owner(group) && request.resource.data.owner == resource.data.owner && request.resource.data.keys().hasOnly(['name','owner']);
+        allow delete: if false;
+        match /members/{uid} {
+          allow read: if self(uid) || member(group) || owner(group);
+          allow create: if self(uid) && (
+            (getAfter(/databases/$(database)/documents/shiftcal/v1/groups/$(group)).data.owner == uid && request.resource.data.keys().hasOnly(['role','name','email']) && request.resource.data.role == 'owner')
+            || (request.resource.data.keys().hasOnly(['role','invite','name','email']) && request.resource.data.role == 'member'
+              && request.resource.data.invite is string && request.auth.token.email_verified == true
+              && get(/databases/$(database)/documents/shiftcal/v1/groups/$(group)/invites/$(request.resource.data.invite)).data.email == request.auth.token.email
+              && get(/databases/$(database)/documents/shiftcal/v1/groups/$(group)/invites/$(request.resource.data.invite)).data.expires > request.time));
+          allow update: if false;
+          allow delete: if (owner(group) || self(uid)) && get(/databases/$(database)/documents/shiftcal/v1/groups/$(group)).data.owner != uid;
+        }
+        match /invites/{invite} {
+          allow create: if owner(group) && request.resource.data.keys().hasOnly(['email','expires']) && request.resource.data.email is string && request.resource.data.expires is timestamp && request.resource.data.expires > request.time && request.resource.data.expires < request.time + duration.value(8,'d');
+          allow read, delete: if owner(group);
+          allow update: if false;
+        }
+        match /records/{record} {
+          function canEdit() { return member(group) && (owner(group) || request.resource.data.key.matches('(override|event|exception)/.*')); }
+          allow read: if member(group) || owner(group);
+          allow create: if canEdit() && validRecord() && request.resource.data.key.matches('(rotation|shift|override|event|exception)/.*') && request.resource.data.revision == 1;
+          allow update: if canEdit() && validRecord() && request.resource.data.key == resource.data.key && request.resource.data.revision == resource.data.revision + 1;
+          allow delete: if false;
+        }
+      }
+    }
+  }
+}
