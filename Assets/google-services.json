@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "656443327052",
+    "project_id": "shiftcal-c6d39",
+    "storage_bucket": "shiftcal-c6d39.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:656443327052:android:84852e006b8191f31feae9",
+        "android_client_info": {
+          "package_name": "com.abramnel.shiftcal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADk2YMlqqSedCe23EWwNEDOnUxvaYKPvc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
