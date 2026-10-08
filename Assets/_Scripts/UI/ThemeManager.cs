@@ -17,9 +17,9 @@ namespace ShiftCal.UI
         public static readonly string[] Names = { "Midnight Graphite", "Deep Teal", "Soft Daylight" };
         private static bool initialized;
         private static readonly string[][] Palettes = {
-            new[]{"#171B22","#232933","#303846","#F2F5F9","#ADB9CA","#9BD5FF","#2A3240","#435064","#FFD28A","#FFA0AF","#64B5FF","#05091070","#102237"},
-            new[]{"#10292E","#193B41","#234C53","#EDF9F6","#ACCDC9","#A4EBD4","#20464D","#41666B","#FFD594","#FFA9B0","#71C9FF","#03171D75","#103C35"},
-            new[]{"#F4F3EF","#FFFFFF","#EBEEF2","#17263C","#57667B","#245EA0","#F9FAFC","#D3DBE4","#92600C","#B62C45","#408AD7","#17223248","#FFFFFF"}
+            new[]{"#171B22","#232933","#303846","#F2F5F9","#ADB9CA","#9BD5FF","#2A3240","#435064","#FFD28A","#FFA0AF","#A1DBFF","#05091070","#102237"},
+            new[]{"#10292E","#193B41","#234C53","#EDF9F6","#ACCDC9","#A4EBD4","#20464D","#41666B","#FFD594","#FFA9B0","#B9FFE4","#03171D75","#103C35"},
+            new[]{"#F4F3EF","#FFFFFF","#EBEEF2","#17263C","#57667B","#245EA0","#F9FAFC","#D3DBE4","#92600C","#B62C45","#184E99","#17223248","#FFFFFF"}
         };
         public static Color Token(Role token) { ColorUtility.TryParseHtmlString(Palettes[(int)Current][(int)token], out var c); return c; }
         public static void Initialize(bool legacyDark)

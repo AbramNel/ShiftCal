@@ -12,13 +12,9 @@ namespace ShiftCal.UI
         [SerializeField] private Text uiMonthLabel;
         [SerializeField] private List<CalendarDayCell> dayCells = new List<CalendarDayCell>(42);
         [SerializeField] private DayDetailsPopup dayDetailsPopup;
-        [SerializeField] private GameObject shiftPickerPanel;
-        [SerializeField] private List<Button> shiftPickerButtons = new List<Button>();
-        [SerializeField] private List<Text> shiftPickerLabels = new List<Text>();
+        public ShiftPickerController shiftPicker;
         [SerializeField] private GameObject repeatPanel;
         [SerializeField] private Text selectionLabel;
-        [SerializeField] private Button shiftChoicePrefab;
-        [SerializeField] private Transform shiftChoiceContent;
         private string selectionStart;
         private string selectionEnd;
         private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; ThemeManager.Changed += Refresh; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
@@ -43,7 +39,7 @@ namespace ShiftCal.UI
             IsEditing = editing; ClearSelection(); preview?.Hide(); dayDetailsPopup?.Hide();
             if (editLabel != null) editLabel.text = editing ? "Done" : "Edit";
             if (selectionBar != null) selectionBar.SetActive(editing);
-            var grid=GetComponentInChildren<ResponsiveCalendarGrid>(true);if(grid!=null){var rect=(RectTransform)grid.transform;rect.offsetMin=new Vector2(rect.offsetMin.x,editing?310:174);grid.Fit();}
+            var grid=GetComponentInChildren<ResponsiveCalendarGrid>(true);if(grid!=null){var rect=(RectTransform)grid.transform;rect.offsetMin=new Vector2(rect.offsetMin.x,editing?174:24);grid.Fit();}
         }
         public void ClearSelection()
         {
@@ -161,34 +157,10 @@ namespace ShiftCal.UI
 
         public void OpenShiftPickerForSelection()
         {
-            dayDetailsPopup?.Hide();
-            ShowShiftPicker();
+            if (IsEditing && selectedDateKeys.Count > 0) shiftPicker.OpenBulk(selectedDateKeys);
         }
-
-        public void ApplyShiftByPickerIndex(int index)
-        {
-            GroupData group = ShiftCal.App.AppSession.Instance != null ? ShiftCal.App.AppSession.Instance.CurrentGroup : null;
-            var choices=group?.shiftTypes?.FindAll(x=>!x.retired);
-            if (choices == null || index < 0 || index >= choices.Count)
-                return;
-            ApplyShiftToSelection(choices[index].id);
-        }
-
-        public void ApplyShiftToSelection(int shiftType)
-        {
-            if (selectedDateKeys.Count == 0)
-                return;
-
-            foreach (string dateKey in selectedDateKeys)
-            {
-                App.AppSession.Instance.SetShift(dateKey, shiftType);
-            }
-
-            ShiftCal.App.AppSession.Instance?.SaveLocal();
-            HideShiftPicker();
-            Refresh();
-        }
-
+        public void OpenShiftPickerForDate(string dateKey, Action closed) => shiftPicker.OpenSingle(DateKeyUtility.FromDateKey(dateKey), closed);
+        public IEnumerable<string> SelectedDates => selectedDateKeys;
         public void ShowRepeatPanel()
         {
             if (selectedDateKeys.Count > 0 && repeatPanel != null) { repeatPanel.SetActive(true); repeatPanel.transform.SetAsLastSibling(); }
@@ -254,50 +226,7 @@ namespace ShiftCal.UI
             return ShiftPatternUtility.Resolve(group.pattern, group.startDateKey, DateKeyUtility.FromDateKey(dateKey));
         }
 
-        private void ShowShiftPicker()
-        {
-            GroupData group = ShiftCal.App.AppSession.Instance != null ? ShiftCal.App.AppSession.Instance.CurrentGroup : null;
-            List<ShiftTypeDefinitionData> shiftTypes = group != null ? group.shiftTypes.FindAll(x=>!x.retired) : null;
-
-            if (selectedDateKeys.Count == 0) return;
-            if (shiftPickerPanel != null) { shiftPickerPanel.SetActive(true); shiftPickerPanel.transform.SetAsLastSibling(); }
-            while (shiftTypes != null && shiftPickerButtons.Count < shiftTypes.Count && shiftChoicePrefab != null)
-            {
-                var button = Instantiate(shiftChoicePrefab, shiftChoiceContent);
-                shiftPickerButtons.Add(button); shiftPickerLabels.Add(button.GetComponentInChildren<Text>());
-            }
-
-            for (int i = 0; i < shiftPickerButtons.Count; i++)
-            {
-                bool active = shiftTypes != null && i < shiftTypes.Count;
-                shiftPickerButtons[i].gameObject.SetActive(active);
-                if (!active)
-                    continue;
-
-                int captured = i;
-                shiftPickerButtons[i].onClick.RemoveAllListeners();
-                shiftPickerButtons[i].onClick.AddListener(() => ApplyShiftByPickerIndex(captured));
-
-                if (i < shiftPickerLabels.Count && shiftPickerLabels[i] != null)
-                    shiftPickerLabels[i].text = shiftTypes[i].name + " " + ShiftTimeUtility.FormatHours(shiftTypes[i].hours);
-                shiftPickerButtons[i].targetGraphic.color = ShiftStyleUtility.ToColor(shiftTypes[i].colorHex);
-                shiftPickerLabels[i].color = ThemeManager.Legible(shiftPickerButtons[i].targetGraphic.color);
-            }
-            if (shiftPickerPanel != null)
-            {
-                var rect=(RectTransform)shiftPickerPanel.transform;
-                float available=((RectTransform)rect.parent).rect.height-350;
-                float height=Mathf.Clamp(190+(shiftTypes?.Count??0)*148,400,Mathf.Max(400,available));
-                rect.anchorMin=Vector2.zero;rect.anchorMax=new Vector2(1,0);rect.pivot=new Vector2(.5f,0);
-                rect.sizeDelta=new Vector2(-48,height);rect.anchoredPosition=new Vector2(0,174);
-            }
-        }
-
-        public void HideShiftPicker()
-        {
-            if (shiftPickerPanel != null)
-                shiftPickerPanel.SetActive(false);
-        }
+        public void HideShiftPicker() { if (shiftPicker != null) shiftPicker.gameObject.SetActive(false); }
 
         private void UpdateSelectionLabel()
         {

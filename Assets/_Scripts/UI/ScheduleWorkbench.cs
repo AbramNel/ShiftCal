@@ -20,13 +20,12 @@ namespace ShiftCal.UI
         public Dropdown recurrence, editScope, ruleShift, eventSound, ruleSound;
         public Toggle[] weekdays;
         public Toggle eventReminder, eventAlarm, eventEnabled, eventVibration, ruleEnabled, ruleAudible, ruleVibration;
-        public Text messageLabel, readinessLabel, accountLabel, syncLabel, loginStatus;
+        public Text messageLabel, readinessLabel, accountLabel, syncLabel, loginStatus, accountDetailsLabel, accountStateLabel;
         public InputField groupName, inviteEmail, invitation;
         public GameObject permissionDetails, upcomingSection, undoButton;
         public Text permissionSummary, upcomingLabel;
         public Button showMore;
         public Transform upcomingContent;
-        public Dropdown themeChoice;
         private bool upcomingOpen;
         private int upcomingLimit = 4;
         private string sourceFilter, editorSnapshot;
@@ -43,7 +42,6 @@ namespace ShiftCal.UI
             AppSession.Instance.Changed += Refresh;
             ThemeManager.Changed += Refresh;
             editScope.onValueChanged.AddListener(ScopeChanged);
-            if(themeChoice!=null) { themeChoice.SetValueWithoutNotify((int)ThemeManager.Current); themeChoice.onValueChanged.AddListener(SetTheme); }
             Hide(); Refresh();
         }
         private void OnDestroy() { if(AppSession.Instance!=null)AppSession.Instance.Changed-=Refresh; ThemeManager.Changed -= Refresh; }
@@ -52,8 +50,12 @@ namespace ShiftCal.UI
         {
             if(Time.unscaledTime<nextRefresh)return;nextRefresh=Time.unscaledTime+2;
             if(loginStatus!=null)loginStatus.text=AuthService.Instance.Status;
-            if(accountLabel!=null)accountLabel.text=AuthService.Instance.DisplayName ?? "On this device";
-            if(syncLabel!=null)syncLabel.text=FirestoreService.Instance.Status+"\n"+AppSession.Instance.Error+"\n"+ScheduleStorage.Status;
+            var auth = AuthService.Instance;
+            string identity = string.IsNullOrWhiteSpace(auth.DisplayName) ? "On this device" : auth.DisplayName;
+            if(accountLabel!=null)accountLabel.text=identity + "  >";
+            if(accountDetailsLabel!=null)accountDetailsLabel.text=identity;
+            if(accountStateLabel!=null)accountStateLabel.text=(auth.IsSignedIn ? "Google account connected" : auth.LocalMode || AppSession.Instance.Data.account == "local" ? "Local calendar on this device" : auth.HasCachedAccess ? "Offline access to your saved account" : "No Google account connected") + "\n" + auth.Status + "\n" + FirestoreService.Instance.Status;
+            if(syncLabel!=null)syncLabel.text=string.Join("\n",new[]{FirestoreService.Instance.Status,AppSession.Instance.Error,ScheduleStorage.Status}.Where(s=>!string.IsNullOrWhiteSpace(s)));
             string signature=string.Join("|",FirestoreService.Instance.MemberLabels);
             if(memberChoice!=null&&signature!=memberSignature){memberSignature=signature;memberChoice.ClearOptions();memberChoice.AddOptions(FirestoreService.Instance.MemberLabels.Count==0?new List<string>{"No members loaded"}:FirestoreService.Instance.MemberLabels);}
             if(readinessLabel!=null&&agendaPanel.activeSelf){readinessLabel.text=AndroidBridge.Readiness();permissionSummary.text=AndroidBridge.Call<string>("permissionSummary")??"Alarm readiness - Android device required";}
@@ -67,7 +69,6 @@ namespace ShiftCal.UI
         public void ToggleUpcoming() { upcomingOpen = !upcomingOpen; sourceFilter = null; upcomingLimit = 4; Refresh(); }
         private void UpcomingFor(string id) { sourceFilter = id; upcomingOpen = true; upcomingLimit = 4; Refresh(); }
         public void MoreUpcoming() { upcomingLimit += 4; Refresh(); }
-        public void SetTheme(int value) => ThemeManager.Select((ThemeManager.Theme)value);
         public void NewEvent()=>NewEvent(DateKeyUtility.ToDateKey(DateTime.Today));
         public void NewEvent(string date)
         {
@@ -165,7 +166,6 @@ namespace ShiftCal.UI
         public void Refresh()
         {
             if(AppSession.Instance==null||Save==null)return;
-            if(themeChoice!=null)themeChoice.SetValueWithoutNotify((int)ThemeManager.Current);
             if(!agendaPanel.activeSelf)return;
             foreach(var row in rows) { row.gameObject.SetActive(false); if(Application.isPlaying)Destroy(row.gameObject);else DestroyImmediate(row.gameObject); } rows.Clear();
             readinessLabel.text=AndroidBridge.Readiness();
@@ -238,7 +238,6 @@ namespace ShiftCal.UI
         public void LeaveGroup()=>FirestoreService.Instance.LeaveGroup();
         public void KeepMine()=>FirestoreService.Instance.ResolveConflicts(true);
         public void UseRemote()=>FirestoreService.Instance.ResolveConflicts(false);
-        public void SetDark(bool value) => ThemeManager.Select(value ? ThemeManager.Theme.MidnightGraphite : ThemeManager.Theme.SoftDaylight);
         public void ExportBackup()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -248,7 +247,20 @@ namespace ShiftCal.UI
             System.IO.File.WriteAllText(path,JsonUtility.ToJson(Save,true));Message("Backup: "+path);
 #endif
         }
-        private void Message(string text){if(messageLabel!=null){messageLabel.text=text;messageLabel.transform.SetAsLastSibling();}}
+        public void ClearMessage() => Message("");
+        private void Message(string text)
+        {
+            if (messageLabel == null) return;
+            messageLabel.text = text; messageLabel.transform.SetAsLastSibling();
+            foreach (var panel in new[]{eventPanel,rulePanel})
+            {
+                var scroll=panel.GetComponentInChildren<ScrollRect>(true);
+                if (scroll != null) scroll.GetComponent<RectTransform>().offsetMin = new Vector2(20,string.IsNullOrEmpty(text)?180:360);
+            }
+            bool editor=eventPanel.activeSelf||rulePanel.activeSelf;
+            messageLabel.rectTransform.offsetMin=new Vector2(28,editor?168:24);
+            messageLabel.rectTransform.offsetMax=new Vector2(-28,editor?342:180);
+        }
         private static void Set(List<InputField> fields,string key,string value){fields.Find(x=>x.name==key).text=value??"";}
         private static string Get(List<InputField> fields,string key)=>fields.Find(x=>x.name==key).text.Trim();
         private static int Number(List<InputField> fields,string key){if(!int.TryParse(Get(fields,key),out int n))throw new ArgumentException("Enter a whole number for "+key);return n;}

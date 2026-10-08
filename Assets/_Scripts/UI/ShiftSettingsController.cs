@@ -92,7 +92,7 @@ namespace ShiftCal.UI
             if (validationLabel != null)
             {
                 validationLabel.text = message;
-                if(settingsScroll!=null)settingsScroll.offsetMin=new Vector2(settingsScroll.offsetMin.x,string.IsNullOrEmpty(message)?136:340);
+                if(settingsScroll!=null)settingsScroll.offsetMin=new Vector2(settingsScroll.offsetMin.x,string.IsNullOrEmpty(message)?24:180);
             }
         }
 

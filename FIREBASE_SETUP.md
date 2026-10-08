@@ -23,7 +23,7 @@ Existing debug key: C:/Users/simyr/.android/debug.keystore, alias androiddebugke
 SHA-1: 1C:15:7E:8A:18:C6:56:7E:82:E9:B8:F5:EB:C5:05:38:0C:17:7B:76
 SHA-256: A4:C9:C4:97:18:F8:AF:4D:97:48:8C:43:E3:2B:E2:9C:80:8D:C7:14:20:9E:13:3E:86:74:54:D8:D9:58:1D:17
 
-No release key was supplied or created. Before updating an existing installed app, verify its original package and signing certificate. Use that original keystore for an update. Do not uninstall to work around a signing mismatch. Development APK verification output is local under Logs/Android and is excluded from Git. No physical-phone installation has been performed.
+No release key was supplied or created. Before updating an existing installed app, verify its original package and signing certificate. Use that original keystore for an update. Do not uninstall to work around a signing mismatch. APK verification output is local under Logs/Android and is excluded from Git. No physical-phone installation has been performed.
 
 ## Dedicated Firestore namespace
 
@@ -34,7 +34,7 @@ Private alarm definitions: /shiftcal/v1/users/{uid}/records/{record}.
 Shared calendar: /shiftcal/v1/groups/{group}/records/{record}.
 Membership and invitations: the group's members and invites subcollections.
 
-Records have key, json, deleted, revision and author fields, explicitly serialized as Firestore dictionaries. Each shift, override, event, exception, alarm rule and rotation is a separate record. Transactions compare revisions. Deletions remain tombstones. Conflicts keep both versions and require a Keep mine / Use remote choice in Options.
+Records have key, json, deleted, revision and author fields, explicitly serialized as Firestore dictionaries. Each shift, override, event, exception, alarm rule and rotation is a separate record. Transactions compare revisions. Deletions remain tombstones. Conflicts keep both versions and require a Keep mine / Use remote choice in Settings > Data & Sharing > Shared Groups.
 
 Owners manage group definitions, rotation and membership. Members can edit shared date overrides and calendar events. Invitations are bound to a verified Google email and expire after seven days. The owner cannot remove themselves or leave their owned group; ownership transfer is not implemented. Other members can leave. Removed members cannot sync new shared changes; previously cached offline calendar copies are not remotely erased.
 
@@ -46,7 +46,7 @@ Work rotations use device-local shift start times and date overrides. Events can
 
 Calendar cancellation affects the shared event. Pause on phone and Skip this affect this device only. Separate event reminders and audible alarms have distinct occurrence identities. Shift rules follow the final resolved shift, including OFF overrides. Untimed shifts cannot be used for a new alarm rule.
 
-Android owns a durable device delivery ledger in its private AtomicFile. Unity sends version-3 ScheduleSave definitions through NativeBridge.commit; native actions preserve that ledger and never write Firebase. OS backup is disabled to prevent another device inheriting a dismissal ledger; use Options > Export local backup for calendar backup. Desktop saves have recoverable previous files; the original PlayerPrefs calendar remains intact.
+Android owns a durable device delivery ledger in its private AtomicFile. Unity sends version-3 ScheduleSave definitions through NativeBridge.commit; native actions preserve that ledger and never write Firebase. OS backup is disabled to prevent another device inheriting a dismissal ledger; use Settings > Data & Sharing > Backup / Restore > Export local backup for calendar backup. Desktop saves have recoverable previous files; the original PlayerPrefs calendar remains intact.
 
 The native queue covers 45 days, up to 128 occurrences, replenishes after each firing and every 12 hours, and rebuilds after reboot, app replacement and clock/zone changes. Ringing stops after 10 minutes. Dismiss stops only the ringing occurrence; Snooze reschedules it; upcoming "Dismiss this alarm" skips only that occurrence. Swiping an upcoming notice does not skip it. Future skip Undo is available in Events & alarms, including after restarting.
 

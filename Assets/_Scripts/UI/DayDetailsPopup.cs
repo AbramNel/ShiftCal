@@ -44,8 +44,16 @@ namespace ShiftCal.UI
         public void ChangeShift()
         {
             if (selected == null) return;
-            System.Action change = () => { Hide(); calendar.SetEditing(true); calendar.BeginDaySelection(selected.dateKey); calendar.EndDaySelection(selected.dateKey); calendar.OpenShiftPickerForSelection(); };
-            if (HasChanges) AppNavigation.Instance.Confirm("Discard unsaved notes before changing the shift?", change); else change();
+            calendar.OpenShiftPickerForDate(selected.dateKey, RefreshShift);
+        }
+        private void RefreshShift()
+        {
+            if (selected == null) return;
+            var date = selected.date;
+            selected = CalendarGenerator.Generate(new System.DateTime(date.Year, date.Month, 1), App.AppSession.Instance.CurrentGroup, App.AppSession.Instance.CalendarOverrides).Find(d => d.dateKey == selected.dateKey);
+            shiftLabel.text = selected.shiftName;
+            timeLabel.text = string.IsNullOrWhiteSpace(selected.startTime) ? "No scheduled hours" : selected.startTime + " – " + selected.endTime;
+            hoursLabel.text = ShiftTimeUtility.FormatHours(selected.hours); colorSwatch.color = ShiftStyleUtility.ToColor(selected.shiftColorHex);
         }
         public void AddEvent()
         {

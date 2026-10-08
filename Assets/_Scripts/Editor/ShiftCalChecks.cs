@@ -17,7 +17,9 @@ using Object=UnityEngine.Object;
 public static class ShiftCalChecks
 {
     public static void RebuildAndRun(){ShiftCalSceneBuilder.BuildPermanentCalendarApp();Run();}
-    public static void BuildAndroid()
+    public static void BuildAndroid() => BuildAndroidInternal(BuildOptions.None);
+    public static void BuildDevelopmentAndroid() => BuildAndroidInternal(BuildOptions.Development);
+    private static void BuildAndroidInternal(BuildOptions options)
     {
         Directory.CreateDirectory("Logs/Android");
         string storePassword=PlayerSettings.Android.keystorePass,aliasPassword=PlayerSettings.Android.keyaliasPass;
@@ -27,7 +29,7 @@ public static class ShiftCalChecks
             // Never substitute a key or change the certificate of the project.
             if(PlayerSettings.Android.keyaliasName=="androiddebugkey"&&PlayerSettings.Android.keystoreName.EndsWith("debug.keystore"))
             { PlayerSettings.Android.keystorePass="android";PlayerSettings.Android.keyaliasPass="android"; }
-            var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{scenes=new[]{"Assets/Calendar.unity"},locationPathName="Logs/Android/ShiftCal-ui.apk",target=BuildTarget.Android,options=BuildOptions.Development});
+            var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{scenes=new[]{"Assets/Calendar.unity"},locationPathName="Logs/Android/ShiftCal-ui.apk",target=BuildTarget.Android,options=options});
             if(report.summary.result!=UnityEditor.Build.Reporting.BuildResult.Succeeded)throw new Exception("Android build failed: "+report.summary.result);
             Debug.Log("ShiftCal Android build passed: "+report.summary.totalSize+" bytes");
         }
@@ -149,29 +151,87 @@ public static class ShiftCalChecks
         session.Data.exceptions.Add(new EventException{seriesId=e.id,originalDate=future,replacement=replacement});info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
         Check(info[replacement.dateKey].events.Count==1&&info[replacement.dateKey].alarms.Count(o=>o.isEvent)==2,"moved exception uses intended calendar date");session.Data.exceptions.Clear();
         var nav=Object.FindFirstObjectByType<AppNavigation>();typeof(AppNavigation).GetMethod("Awake",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(nav,null);
-        nav.ShowLogin();nav.ShowCalendar();nav.ShowSettings();nav.ShowProfile();work.ShowAgenda();
-        Check(nav.CurrentScreen==work.agendaPanel,"agenda tracks opening screen");nav.Back();Check(nav.CurrentScreen.name=="Profile Screen","Back returns from Events to Profile");nav.Back();Check(nav.CurrentScreen.name=="Settings Screen","Back returns to actual previous Settings screen");nav.Back();Check(nav.CurrentScreen==cal.gameObject,"Back returns to Calendar");
+        nav.ShowLogin();nav.ShowCalendar();nav.ShowSettings();nav.ShowManageShifts();
+        Check(nav.CurrentScreen.name=="Manage Shifts Screen","Manage Shifts opens from Settings");nav.Back();Check(nav.CurrentScreen.name=="Settings Screen","Manage Shifts Back returns to Settings");
+        nav.ShowAccount();var account=nav.transform.Find("Account Popup").GetComponent<ModalPanel>();nav.Register(account);
+        Check(account.gameObject.activeInHierarchy&&nav.CurrentScreen.name=="Settings Screen","account opens as modal over Settings");nav.Back();Check(!account.gameObject.activeSelf&&nav.CurrentScreen.name=="Settings Screen","account closes to Settings");
+        work.ShowAgenda();Check(nav.CurrentScreen==work.agendaPanel,"agenda tracks opening Settings screen");nav.Back();Check(nav.CurrentScreen.name=="Settings Screen","Back returns from Events to Settings");nav.Back();Check(nav.CurrentScreen==cal.gameObject,"Back returns to Calendar");
         int history=nav.HistoryCount;nav.ShowCalendar();Check(nav.HistoryCount==history,"duplicate navigation suppressed");
         work.NewEvent(future);nav.Register(work.eventPanel.GetComponent<ModalPanel>());work.eventFields[0].text="Unsaved";nav.Back();
         Check(work.eventPanel.activeSelf&&nav.confirmation.gameObject.activeSelf,"Back confirms unsaved editor");nav.confirmation.Cancel();nav.Back();nav.confirmation.Accept();Check(!work.eventPanel.activeSelf,"confirm discard closes editor");
         work.ShowAgenda();work.Refresh();Check(work.agendaContent.GetComponentsInChildren<ScheduleListRow>().Length==session.Data.events.Count+session.Data.rules.Count,"one main card per series/rule");
         work.ToggleUpcoming();Check(work.upcomingContent.GetComponentsInChildren<ScheduleListRow>().Length<=4,"Upcoming starts with at most four occurrences");work.Hide();
-        foreach(string screenName in new[]{"Calendar Screen","Settings Screen","Profile Screen","Events and Alarms"})
-        {
-            var screen=nav.GetComponentsInChildren<Transform>(true).First(t=>t.name==screenName);var bar=screen.Find("Bottom Navigation");
-            Check(bar.childCount==4&&bar.GetChild(0).GetComponentInChildren<Text>().text=="Calendar"&&bar.GetChild(1).GetComponentInChildren<Text>().text=="Events"&&bar.GetChild(2).GetComponentInChildren<Text>().text=="Settings"&&bar.GetChild(3).GetComponentInChildren<Text>().text=="Profile","consistent navigation "+screenName);
-        }
+        Check(!nav.GetComponentsInChildren<Transform>(true).Any(x=>x.name=="Bottom Navigation"),"no bottom navigation objects remain");
+        Check(!nav.GetComponentsInChildren<Dropdown>(true).Any(x=>x.name=="Theme"),"redundant theme dropdown removed");
+        Check(!nav.GetComponentsInChildren<Transform>(true).Any(x=>x.name=="Profile Screen"),"obsolete Profile screen removed");
+        PickerChecks(session,cal,nav);
         bool had=PlayerPrefs.HasKey(ThemeManager.PreferenceKey);int old=PlayerPrefs.GetInt(ThemeManager.PreferenceKey);
         var flag=typeof(ThemeManager).GetField("initialized",BindingFlags.Static|BindingFlags.NonPublic);bool wasInitialized=(bool)flag.GetValue(null);
         try
         {
             PlayerPrefs.DeleteKey(ThemeManager.PreferenceKey);flag.SetValue(null,false);ThemeManager.Initialize(false);Check(ThemeManager.Current==ThemeManager.Theme.SoftDaylight,"existing light preference migrates");
             PlayerPrefs.DeleteKey(ThemeManager.PreferenceKey);flag.SetValue(null,false);ThemeManager.Initialize(true);Check(ThemeManager.Current==ThemeManager.Theme.MidnightGraphite,"dark/new user defaults to Graphite");
-            foreach(var theme in new[]{ThemeManager.Theme.MidnightGraphite,ThemeManager.Theme.DeepTeal,ThemeManager.Theme.SoftDaylight}) {ThemeManager.Select(theme);Check(PlayerPrefs.GetInt(ThemeManager.PreferenceKey)==(int)theme,"theme persists "+theme);var row=Object.Instantiate(work.rowPrefab);Check(row.GetComponent<ThemeManager>().GetComponent<Image>().color==ThemeManager.Token(ThemeManager.Role.Surface),"dynamic row uses current theme "+theme);Object.DestroyImmediate(row.gameObject);}
+            foreach(var theme in new[]{ThemeManager.Theme.MidnightGraphite,ThemeManager.Theme.DeepTeal,ThemeManager.Theme.SoftDaylight}) {
+                var sample=nav.GetComponentsInChildren<ThemeSample>(true).Single(x=>x.choice==theme);var button=sample.GetComponent<Button>();for(int i=0;i<button.onClick.GetPersistentEventCount();i++)button.onClick.SetPersistentListenerState(i,UnityEngine.Events.UnityEventCallState.EditorAndRuntime);button.onClick.Invoke();
+                Check(ThemeManager.Current==theme&&sample.GetComponent<Image>().raycastTarget,"theme button invokes actual palette "+theme);
+                foreach(var preview in nav.GetComponentsInChildren<ThemeSample>(true)) {preview.Refresh();Check(preview.selectedBorder.enabled==(preview.choice==theme),"selected theme marker "+theme+" / "+preview.choice);}
+                Check(PlayerPrefs.GetInt(ThemeManager.PreferenceKey)==(int)theme,"theme persists "+theme);var row=Object.Instantiate(work.rowPrefab);Check(row.GetComponent<ThemeManager>().GetComponent<Image>().color==ThemeManager.Token(ThemeManager.Role.Surface),"dynamic row uses current theme "+theme);Object.DestroyImmediate(row.gameObject);}
             ThemeManager.Select(ThemeManager.Theme.DeepTeal);ThemeManager.Initialize(false);Check(ThemeManager.Current==ThemeManager.Theme.DeepTeal,"account migration never resets explicit appearance");flag.SetValue(null,false);ThemeManager.Initialize(false);Check(ThemeManager.Current==ThemeManager.Theme.DeepTeal,"explicit theme restores on next launch");
         }
         finally {if(had)PlayerPrefs.SetInt(ThemeManager.PreferenceKey,old);else PlayerPrefs.DeleteKey(ThemeManager.PreferenceKey);PlayerPrefs.Save();flag.SetValue(null,wasInitialized);ThemeManager.Apply(ThemeManager.Theme.MidnightGraphite);}
 
+    }
+
+    private static void PickerChecks(AppSession session,CalendarController cal,AppNavigation nav)
+    {
+        cal.gameObject.SetActive(true);cal.SetEditing(false);cal.currentMonth=new DateTime(2026,7,1);cal.Refresh();
+        var popup=cal.GetComponentInChildren<DayDetailsPopup>(true);var day=CalendarGenerator.Generate(cal.currentMonth,session.CurrentGroup,session.CalendarOverrides).First(d=>d.dateKey=="2026-07-04");
+        popup.Show(day);var note=(InputField)typeof(DayDetailsPopup).GetField("noteInput",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(popup);note.text="Uncommitted note";
+        nav.Register(popup.GetComponent<ModalPanel>());popup.ChangeShift();var picker=cal.shiftPicker;nav.Register(picker.GetComponent<ModalPanel>());
+        Check(picker.FocusedKey==day.dateKey&&!cal.IsEditing&&!picker.IsBulk&&popup.gameObject.activeSelf,"day Change Shift focuses original day without global edit mode");
+        var originalEvents=JsonUtility.ToJson(new ScheduleSave{events=session.Data.events,rules=session.Data.rules,exceptions=session.Data.exceptions});
+        string second="2026-07-05";int secondShift=ShiftPatternUtility.Resolve(session.CurrentGroup.pattern,session.CurrentGroup.startDateKey,DateKeyUtility.FromDateKey(second));
+        picker.ApplyShift(2);
+        Check(session.CalendarOverrides[day.dateKey].shiftType==2&&session.CalendarOverrides[day.dateKey].note=="Updated note"&&session.CalendarOverrides[day.dateKey].personName=="Person","focused shift preserves saved note/person");
+        Check(!session.CalendarOverrides.ContainsKey(second)&&secondShift==ShiftPatternUtility.Resolve(session.CurrentGroup.pattern,session.CurrentGroup.startDateKey,DateKeyUtility.FromDateKey(second)),"focused shift never edits neighbor");
+        Check(picker.gameObject.activeSelf&&picker.feedback.text.StartsWith("Applied"),"picker stays open with applied feedback");
+        picker.Focus(new DateTime(2026,12,31));picker.dayButtons[11].onClick.Invoke();Check(picker.FocusedKey=="2027-01-01","day strip crosses year boundary with real dates");
+        picker.ApplyShift(1);Check(session.CalendarOverrides["2027-01-01"].shiftType==1,"navigated shift applies only to focused new date");
+        nav.Back();Check(popup.gameObject.activeSelf&&!picker.gameObject.activeSelf&&note.text=="Uncommitted note"&&popup.HasChanges,"closing picker returns to unsaved day details intact");nav.Back();Check(nav.confirmation.gameObject.activeSelf,"day close confirms unsaved notes");nav.confirmation.Accept();
+        cal.SetEditing(true);cal.BeginDaySelection("2026-06-30");cal.EndDaySelection("2026-06-30");cal.BeginDaySelection("2026-07-02");cal.EndDaySelection("2026-07-02");
+        var selected=cal.SelectedDates.OrderBy(k=>k).ToArray();cal.OpenShiftPickerForSelection();
+        Check(picker.IsBulk&&picker.BulkCount==2&&picker.scopeLabel.text.StartsWith("Apply to 2"),"bulk picker declares explicit selected scope");
+        picker.Focus(new DateTime(2027,1,3));picker.ApplyShift(1);
+        Check(cal.SelectedDates.OrderBy(k=>k).SequenceEqual(selected)&&selected.All(k=>session.CalendarOverrides[k].shiftType==1)&&!session.CalendarOverrides.ContainsKey("2027-01-03"),"bulk navigation preserves set and never applies to preview date");
+        Check(JsonUtility.ToJson(new ScheduleSave{events=session.Data.events,rules=session.Data.rules,exceptions=session.Data.exceptions})==originalEvents,"shift edits retain events and alarm rules");
+        cal.SetEditing(false);
+        var todayCell=cal.GetComponentsInChildren<CalendarDayCell>(true).First(c=>c.DateKey==day.dateKey);todayCell.UpdateToday(day.date);Check(todayCell.transform.Find("Today pill").GetComponent<Image>().enabled,"Today uses number pill");todayCell.UpdateToday(day.date.AddDays(1));Check(!todayCell.transform.Find("Today pill").GetComponent<Image>().enabled,"Today indicator changes when device date changes");
+    }
+    // These flushes emulate LateUpdate between forced layouts in batch-mode captures.
+    private static void SettleLayout(CalendarController cal)
+    {
+        Canvas.ForceUpdateCanvases();cal.GetComponentInChildren<ResponsiveCalendarGrid>(true).Fit();Canvas.ForceUpdateCanvases();
+        foreach(var cell in cal.GetComponentsInChildren<CalendarDayCell>(true))cell.FlushPresentation();
+        if(cal.preview.gameObject.activeInHierarchy)cal.preview.Fit();
+        if(cal.shiftPicker.gameObject.activeInHierarchy)cal.shiftPicker.FlushLayout();
+        Canvas.ForceUpdateCanvases();
+    }
+    public static void CheckPickerReopen()
+    {
+        checks=0;EditorSceneManager.OpenScene("Assets/Calendar.unity");
+        var session=Object.FindFirstObjectByType<AppSession>();AppSession.Instance=session;
+        var data=new ScheduleSave{group=Group()};typeof(AppSession).GetProperty("Data").SetValue(session,data);session.CurrentGroup=data.group;
+        var cal=Object.FindFirstObjectByType<CalendarController>(FindObjectsInactive.Include);cal.gameObject.SetActive(true);cal.SetEditing(false);
+        var picker=cal.shiftPicker;picker.OpenSingle(new DateTime(2026,12,31));SettleLayout(cal);
+        var day=(RectTransform)picker.dayButtons[10].transform;
+        picker.navigator.content.anchoredPosition-=new Vector2(day.rect.width+8,0);picker.RequestSnap();picker.gameObject.SetActive(false);
+        picker.OpenSingle(new DateTime(2027,1,10));SettleLayout(cal);
+        Check(picker.FocusedKey=="2027-01-10","closing before pending swipe snap preserves reopened date");
+        Check(!cal.IsEditing&&!picker.IsBulk,"reopened picker retains single-day scope");
+        var focused=day.TransformPoint(day.rect.center);var center=picker.navigator.viewport.TransformPoint(picker.navigator.viewport.rect.center);
+        Check(Mathf.Abs(focused.x-center.x)<1,"reopened picker centers exact requested date");
+        Check(session.CalendarOverrides.Count==0,"cancelled swipe does not mutate dates");
+        Debug.Log("ShiftCal picker reopen checks passed: "+checks);
     }
     private static void Capture(Vector2Int size,CalendarController cal,ScheduleWorkbench work)
     {
@@ -187,21 +247,24 @@ public static class ShiftCalChecks
         var date=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(1));
         AppSession.Instance.UpdateDayDetails(date,"Bring the reports.\nMeet at the north entrance.\nConfirm handover before leaving.","Abram");
         foreach(var theme in new[]{ThemeManager.Theme.MidnightGraphite,ThemeManager.Theme.DeepTeal,ThemeManager.Theme.SoftDaylight})
-        foreach(var screen in new[]{"Login Screen","Calendar Screen","Edit-Calendar","Settings Screen","Profile Screen","Events","Upcoming","Event-Editor","Alarm-Editor","Shift-Editor","Day-Preview","Day-Editor","Repeat","Shift-Picker","Confirmation"})
+        foreach(var screen in new[]{"Login Screen","Calendar Screen","Edit-Calendar","Settings Screen","Manage-Shifts","Account","Events","Upcoming","Event-Editor","Alarm-Editor","Shift-Editor","Day-Preview","Day-Editor","Repeat","Shift-Picker","Bulk-Picker","Confirmation"})
         {
             work.Hide();settings.editor.gameObject.SetActive(false);popup.Hide();cal.preview.Hide();cal.SetEditing(false);
-            var visible=screen=="Settings Screen"||screen=="Shift-Editor"?"Settings Screen":screen=="Login Screen"||screen=="Profile Screen"?screen:"Calendar Screen";
+            var visible=screen=="Manage-Shifts"||screen=="Shift-Editor"?"Manage Shifts Screen":screen=="Settings Screen"||screen=="Account"?"Settings Screen":screen=="Login Screen"?screen:"Calendar Screen";
+            root.Find("Account Popup").gameObject.SetActive(false);
             foreach(Transform child in root)if(child.name.EndsWith("Screen"))child.gameObject.SetActive(child.name==visible);
             cal.currentMonth=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);cal.Refresh();
-            if(visible=="Settings Screen")settings.Refresh();
+            if(visible=="Manage Shifts Screen")settings.Refresh();
+            if(screen=="Account")root.Find("Account Popup").gameObject.SetActive(true);
             if(screen=="Events"||screen=="Upcoming") {work.ShowAgenda();if(screen=="Upcoming"&&!work.upcomingSection.activeSelf)work.ToggleUpcoming();if(screen=="Events"&&work.upcomingSection.activeSelf)work.ToggleUpcoming();}
             if(screen=="Event-Editor")work.NewEvent(date);
             if(screen=="Alarm-Editor")work.NewRule();
             if(screen=="Shift-Editor")settings.editor.Show(settings,AppSession.Instance.CurrentGroup.shiftTypes[1]);
             if(screen=="Day-Preview"||screen=="Day-Editor") {cal.TapDay(date);if(screen=="Day-Editor")cal.preview.OpenDetails();}
-            if(screen=="Edit-Calendar"||screen=="Repeat"||screen=="Shift-Picker") {cal.SetEditing(true);cal.BeginDaySelection(date);cal.ExtendDaySelection(DateKeyUtility.ToDateKey(DateTime.Today.AddDays(4)));cal.EndDaySelection(date);if(screen=="Repeat")cal.ShowRepeatPanel();if(screen=="Shift-Picker")cal.OpenShiftPickerForSelection();}
+            if(screen=="Edit-Calendar"||screen=="Repeat"||screen=="Bulk-Picker") {cal.SetEditing(true);cal.BeginDaySelection(date);cal.ExtendDaySelection(DateKeyUtility.ToDateKey(DateTime.Today.AddDays(4)));cal.EndDaySelection(date);if(screen=="Repeat")cal.ShowRepeatPanel();if(screen=="Bulk-Picker")cal.OpenShiftPickerForSelection();}
+            if(screen=="Shift-Picker")cal.shiftPicker.OpenSingle(DateTime.Today.AddDays(6));
             var confirmation=Object.FindFirstObjectByType<ConfirmationDialog>(FindObjectsInactive.Include);if(screen=="Confirmation")confirmation.Show("Discard unsaved changes?",()=>{});
-            ThemeManager.Apply(theme);camera.backgroundColor=ThemeManager.Token(ThemeManager.Role.Background);Canvas.ForceUpdateCanvases();cal.GetComponentInChildren<ResponsiveCalendarGrid>(true).Fit();Canvas.ForceUpdateCanvases();
+            ThemeManager.Apply(theme);camera.backgroundColor=ThemeManager.Token(ThemeManager.Role.Background);SettleLayout(cal);
             foreach(var toggle in Object.FindObjectsByType<Toggle>(FindObjectsSortMode.None))
                 if(toggle.gameObject.activeInHierarchy)Check(((RectTransform)toggle.transform).rect.width<=100,"compact toggle fits "+screen+" / "+toggle.name);
             if(screen.EndsWith("Editor"))
@@ -212,6 +275,20 @@ public static class ShiftCalChecks
                 var scroll=panel.GetComponentInChildren<ScrollRect>();scroll.verticalNormalizedPosition=0;Canvas.ForceUpdateCanvases();
                 Check(scroll.content.rect.height>=0&&scroll.viewport.rect.height>0,"editor scroll accessible "+screen+" / "+size);
                 scroll.verticalNormalizedPosition=1;
+            }
+            if(screen=="Shift-Picker"||screen=="Bulk-Picker")
+            {
+                var picker=cal.shiftPicker;var rect=(RectTransform)picker.dayButtons[10].transform;
+                var focused=RectTransformUtility.WorldToScreenPoint(camera,rect.TransformPoint(rect.rect.center));
+                var center=RectTransformUtility.WorldToScreenPoint(camera,picker.navigator.viewport.TransformPoint(picker.navigator.viewport.rect.center));
+                Check(Mathf.Abs(focused.x-center.x)<1,"focused date centered "+size+" / "+theme);
+                picker.navigator.content.anchoredPosition-=new Vector2(rect.rect.width+8,0);picker.RequestSnap();picker.FlushLayout();SettleLayout(cal);
+                Check(picker.dayButtons[10].GetComponentsInChildren<Text>()[0].text==picker.FocusedDate.Day.ToString(),"swipe snaps and recenters real date "+size+" / "+theme);
+                var choiceScroll=picker.choices.GetComponentInParent<ScrollRect>();
+                var firstChoice=(RectTransform)picker.choices.GetChild(0);var corners2=new Vector3[4];firstChoice.GetWorldCorners(corners2);
+                var top=RectTransformUtility.WorldToScreenPoint(camera,corners2[1]);var viewTop=RectTransformUtility.WorldToScreenPoint(camera,choiceScroll.viewport.TransformPoint(new Vector3(choiceScroll.viewport.rect.xMin,choiceScroll.viewport.rect.yMax)));
+                Check(top.y<=viewTop.y+1&&top.y>=viewTop.y-20,"shift list opens at top "+screen+" / "+size+" / "+theme);
+                var bounds2=picker.navigator.viewport.rect;Check(rect.rect.width*7+8*6<=bounds2.width+1,"seven day navigator fits "+size);
             }
             if(screen=="Day-Preview") {var corners=new Vector3[4];cal.preview.card.GetWorldCorners(corners);Check(corners.All(p=>{var point=RectTransformUtility.WorldToScreenPoint(camera,p);return point.y>=24&&point.y<=size.y-24;}),"preview stays in safe area "+size+" / "+theme);}
             var grid=cal.GetComponentsInChildren<GridLayoutGroup>(true).First(x=>x.constraintCount==7);var bounds=((RectTransform)grid.transform).rect;

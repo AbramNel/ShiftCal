@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 public static partial class ShiftCalSceneBuilder
 {
-    private static void CreateSchedulingUI(Transform root,GameObject profile,GameObject login,GameObject calendar)
+    private static void CreateSchedulingUI(Transform root,GameObject settings,GameObject account,GameObject login)
     {
         var work=root.gameObject.AddComponent<ScheduleWorkbench>();
         work.agendaPanel=CreateScreen("Events and Alarms",root);
@@ -70,30 +70,27 @@ public static partial class ShiftCalSceneBuilder
         Command(rule,"Delete alarm rule",work.DeleteRule);
         EditorFooter(work.rulePanel,work.SaveRule,work.CancelEditor);
 
-        var profileContent=FindChild(profile.transform,"Options Scroll Content");
-        work.accountLabel=FindChild(profile.transform,"Account Label").GetComponent<Text>();
-        work.syncLabel=FindChild(profile.transform,"Sync Label").GetComponent<Text>();
-        AddLayoutElement(work.syncLabel.gameObject,-1,180);
-        work.themeChoice=FindChild(profile.transform,"Theme").GetComponent<Dropdown>();
-        Command(profileContent,"Events & alarms",work.ShowAgenda);
-        Command(profileContent,"Retry sync",work.Retry);
-        Command(profileContent,"Import this device's local calendar",work.ImportLocal);
-        var groupContent=Expandable(profileContent,"Shared groups & sync");
+        var settingsContent=FindChild(settings.transform,"Settings Scroll Content");
+        work.accountLabel=FindChild(settings.transform,"Account Label").GetComponent<Text>();
+        work.syncLabel=FindChild(settings.transform,"Sync Label").GetComponent<Text>();
+        work.accountDetailsLabel=FindChild(account.transform,"Account Details Label").GetComponent<Text>();
+        work.accountStateLabel=FindChild(account.transform,"Account State Label").GetComponent<Text>();
+        UnityEventTools.AddPersistentListener(FindChild(settings.transform,"Events & Alarms").GetComponent<Button>().onClick,work.ShowAgenda);
+        var sharing=SettingsCard(settingsContent,"Data & Sharing");
+        var groupContent=Expandable(sharing,"Shared Groups");
         work.groupName=Field(groupContent,"groupName","New group name");Command(groupContent,"Create group",work.CreateGroup);
         work.inviteEmail=Field(groupContent,"inviteEmail","Invite Google account email");Command(groupContent,"Create invitation",work.Invite);
         work.invitation=Field(groupContent,"invitation","Invitation code");Command(groupContent,"Join invited group",work.Join);
         work.memberChoice=Choice(groupContent,"Group member",new[]{"No members loaded"});Command(groupContent,"Refresh group members",work.Members);Command(groupContent,"Remove selected member",work.RemoveMember);Command(groupContent,"Leave shared group",work.LeaveGroup);
         Command(groupContent,"Conflicts: keep my edits",work.KeepMine);Command(groupContent,"Conflicts: use remote edits",work.UseRemote);
-        Command(profileContent,"Export local backup",work.ExportBackup);
+        var backup=Expandable(sharing,"Backup / Restore");Command(backup,"Export local backup",work.ExportBackup);Command(backup,"Import this device's local calendar",work.ImportLocal);
+        var advanced=SettingsCard(settingsContent,"Advanced");var utilities=Expandable(advanced,"Sync tools");Command(utilities,"Retry sync",work.Retry);
 
         var loginContent=FindChild(login.transform,"Login Content");
         var local=Command(loginContent,"Use on this device",null);local.name="Local Mode Button";
         local.transform.SetSiblingIndex(4);
         var privacy=FindChild(login.transform,"Privacy Note").GetComponent<Text>();privacy.text="Local calendars and alarms work offline.";
         work.loginStatus=Body(loginContent,"",180);
-        var nav=FindChild(calendar.transform,"Bottom Navigation");
-        var agendaNav=Command(nav,"Events",work.ShowAgenda);AddLayoutElement(agendaNav.gameObject,0,-1,1);
-
         // Validation stays visible above system navigation regardless of which editor is open.
         var message=CreateText("Schedule Message",root,"",30,Danger,TextAnchor.MiddleCenter,FontStyle.Bold);
         AnchorStretch(message.rectTransform,0,0,1,0,20,0,-20,104);message.raycastTarget=false;work.messageLabel=message;
@@ -107,22 +104,21 @@ public static partial class ShiftCalSceneBuilder
     }
     private static RectTransform ScreenContent(GameObject screen,string title)
     {
-        CreateTopBar(screen.transform,title,false);
+        CreateTopBar(screen.transform,title);
         if(screen.name.EndsWith("Editor")){screen.AddComponent<ModalPanel>().dismissOutside=false;screen.AddComponent<KeyboardAvoidance>();}
         var content=CreateScrollContent(title+" Scroll",screen.transform,24,36,36,24,40,out _);
-        AnchorStretch(content.parent.parent.GetComponent<RectTransform>(),0,0,1,1,20,156,-20,-174);
+        AnchorStretch(content.parent.parent.GetComponent<RectTransform>(),0,0,1,1,20,24,-20,-174);
         return content;
     }
     private static void EditorFooter(GameObject screen,UnityEngine.Events.UnityAction save,UnityEngine.Events.UnityAction cancel)
     {
+        var close=CreateButton("Close "+screen.name,screen.transform,"×",Vector2.zero,Vector2.zero,Input,Primary,48);
+        AnchorStretch(close.GetComponent<RectTransform>(),1,1,1,1,-160,-148,-24,-12);UnityEventTools.AddPersistentListener(close.onClick,cancel);
         var footer=CreateHorizontalGroup("Editor actions",screen.transform,20,0,0,0,0);
-        AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,56,120,-56,252);
-        var back=Command(footer.transform,"Cancel",cancel);AddLayoutElement(back.gameObject,0,-1,1);
+        AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,32,24,-32,156);
         var commit=Command(footer.transform,"Save",save);AddLayoutElement(commit.gameObject,0,-1,1);
-        commit.GetComponent<Image>().color=Primary;
-        commit.GetComponentInChildren<Text>().color=Hex("#04111F");
-        var content=screen.GetComponentInChildren<ScrollRect>(true).GetComponent<RectTransform>();
-        content.offsetMin=new Vector2(content.offsetMin.x,280);
+        commit.GetComponent<Image>().color=Primary;commit.GetComponentInChildren<Text>().color=Hex("#04111F");
+        var content=screen.GetComponentInChildren<ScrollRect>(true).GetComponent<RectTransform>();content.offsetMin=new Vector2(content.offsetMin.x,180);
     }
     private static InputField Field(Transform content,string key,string label,bool multiline=false)
     {
@@ -186,7 +182,7 @@ public static partial class ShiftCalSceneBuilder
     {
         foreach(var graphic in root.GetComponentsInChildren<Graphic>(true))
         {
-            if(graphic.GetComponentInParent<ThemeSample>(true)!=null||graphic.name=="Logo"||graphic.name=="Chosen color"||graphic.name=="Day Details Color"||graphic.name=="Preview shift color"||graphic.name.StartsWith("Color #")||graphic.name=="Theme preview"||graphic.GetComponentInParent<CalendarDayCell>(true)!=null||graphic.GetComponentInParent<ShiftSettingRow>(true)!=null&&graphic.name=="ColorSwatch")continue;
+            if(graphic.GetComponentInParent<ThemeSample>(true)!=null||graphic.name=="Logo"||graphic.name=="Chosen color"||graphic.name=="Day Details Color"||graphic.name=="Preview shift color"||graphic.name=="Choice swatch"||graphic.GetComponentInParent<ShiftDayNavigator>(true)!=null||graphic.name.StartsWith("Color #")||graphic.name=="Theme preview"||graphic.GetComponentInParent<CalendarDayCell>(true)!=null||graphic.GetComponentInParent<ShiftSettingRow>(true)!=null&&graphic.name=="ColorSwatch")continue;
             ThemeManager.Role? role=null;Color color=graphic.color;
             if(graphic is Text){if(color==TextDark||color==Color.white)role=ThemeManager.Role.Text;else if(color==Danger)role=ThemeManager.Role.Destructive;else if(color==Hex("#04111F"))role=ThemeManager.Role.OnAccent;else if(color==TextMuted)role=ThemeManager.Role.Muted;else if(color==Primary)role=ThemeManager.Role.Accent;}
             else if(color==Background||color==Header)role=ThemeManager.Role.Background;

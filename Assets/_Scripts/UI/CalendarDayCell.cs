@@ -13,7 +13,9 @@ namespace ShiftCal.UI
         private CalendarDayData day;
         private Color normalColor;
         private Vector2 pressed;
-        private bool dragged;
+        private bool dragged, presentationPending = true;
+        private Vector2 fittedSize;
+        private System.DateTime shownToday;
         private readonly List<RaycastResult> hits = new List<RaycastResult>();
         public string DateKey => day?.dateKey;
         public bool IsSelected => selectedOutline != null && selectedOutline.enabled;
@@ -29,22 +31,37 @@ namespace ShiftCal.UI
             if (dimOverlay != null) { dimOverlay.gameObject.SetActive(!day.isCurrentMonth); dimOverlay.color = ThemeManager.Token(ThemeManager.Role.DimmedDate); }
             if (noteIcon != null) { noteIcon.gameObject.SetActive(!string.IsNullOrWhiteSpace(day.note)); noteIcon.color = ThemeManager.Legible(normalColor); }
             if (alarmIcon != null) { alarmIcon.gameObject.SetActive(hasAlarm); alarmIcon.color = ThemeManager.Legible(normalColor); }
-            if (todayOutline != null) { todayOutline.enabled = day.date.Date == System.DateTime.Today; todayOutline.color = ThemeManager.Token(ThemeManager.Role.Accent); }
-            SetSelected(false); Adapt();
+
+            SetSelected(false); presentationPending = true;
         }
         private static string Short(string text, int length)
         {
             text = (text ?? "").Replace('\n',' ').Replace('\r',' ').Trim();
             return text.Length > length ? text.Substring(0, length - 1) + "…" : text;
         }
-        private void OnRectTransformDimensionsChange() => Adapt();
-        private void Adapt()
+        private void OnRectTransformDimensionsChange() => presentationPending = true;
+        private void LateUpdate() => FlushPresentation();
+        public void FlushPresentation()
         {
-            if (uiNoteLabel == null) return;
-            float height = ((RectTransform)transform).rect.height;
-            if (day != null) { uiShiftNameLabel.text = FitText(uiShiftNameLabel, day.shiftName); uiNoteLabel.text = FitText(uiNoteLabel, day.note); }
-            uiNoteLabel.gameObject.SetActive(height >= 160 && day != null && !string.IsNullOrWhiteSpace(day.note));
-            if (uiHoursLabel != null) uiHoursLabel.gameObject.SetActive(height >= 185 && day != null && day.hours > 0);
+            if (CanvasUpdateRegistry.IsRebuildingLayout() || CanvasUpdateRegistry.IsRebuildingGraphics()) return;
+            var size = ((RectTransform)transform).rect.size;
+            if (day != null && shownToday != System.DateTime.Today) UpdateToday(System.DateTime.Today);
+            if (!presentationPending && size == fittedSize) return;
+            presentationPending = false; fittedSize = size;
+            if (uiNoteLabel == null || day == null) return;
+            string shift = FitText(uiShiftNameLabel, day.shiftName), note = FitText(uiNoteLabel, day.note);
+            if (uiShiftNameLabel.text != shift) uiShiftNameLabel.text = shift;
+            if (uiNoteLabel.text != note) uiNoteLabel.text = note;
+            SetVisible(uiNoteLabel.gameObject, size.y >= 160 && !string.IsNullOrWhiteSpace(day.note));
+            if (uiHoursLabel != null) SetVisible(uiHoursLabel.gameObject, size.y >= 185 && day.hours > 0);
+        }
+        private static void SetVisible(GameObject target, bool visible) { if (target.activeSelf != visible) target.SetActive(visible); }
+        public void UpdateToday(System.DateTime today)
+        {
+            shownToday = today.Date;
+            bool current = day != null && day.date.Date == shownToday;
+            if (todayOutline != null) { todayOutline.enabled = current; todayOutline.color = ThemeManager.Token(ThemeManager.Role.Accent); }
+            uiDayNumberLabel.color = current ? ThemeManager.Legible(ThemeManager.Token(ThemeManager.Role.Accent)) : ThemeManager.Legible(uiBackground.color);
         }
         private static string FitText(Text label, string value)
         {
@@ -57,7 +74,16 @@ namespace ShiftCal.UI
         }
         public void SetSelected(bool selected)
         {
-            if (selectedOutline != null) { selectedOutline.enabled = selected; selectedOutline.color = ThemeManager.Token(ThemeManager.Role.Selection); var outline = selectedOutline.GetComponent<Outline>(); if (outline != null) outline.effectColor = new Color(.3f,.65f,1); }
+            if (selectedOutline != null)
+            {
+                selectedOutline.enabled = selected;
+                selectedOutline.color = ThemeManager.Token(ThemeManager.Role.Selection);
+                var outline = selectedOutline.GetComponent<Outline>();
+                if (outline != null) outline.effectColor = ThemeManager.Token(ThemeManager.Role.Background);
+            }
+            uiBackground.color = selected ? Color.Lerp(normalColor, ThemeManager.Token(ThemeManager.Role.Selection), .12f) : normalColor;
+            foreach (var text in new[]{uiShiftNameLabel, uiHoursLabel, uiNoteLabel}) if (text != null) text.color = ThemeManager.Legible(uiBackground.color);
+            UpdateToday(System.DateTime.Today);
         }
         public void OnPointerDown(PointerEventData data)
         {

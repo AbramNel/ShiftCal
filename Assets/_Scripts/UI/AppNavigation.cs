@@ -8,7 +8,7 @@ namespace ShiftCal.UI
     public class AppNavigation : MonoBehaviour
     {
         public static AppNavigation Instance { get; private set; }
-        [SerializeField] private GameObject loginScreen, calendarScreen, settingsScreen, profileScreen;
+        [SerializeField] private GameObject loginScreen, calendarScreen, settingsScreen, manageShiftsScreen, accountPopup;
         public ConfirmationDialog confirmation;
         private readonly List<GameObject> history = new List<GameObject>();
         private readonly List<ModalPanel> modals = new List<ModalPanel>();
@@ -52,13 +52,13 @@ namespace ShiftCal.UI
             if (modals.Count > 0) { modals[modals.Count - 1].RequestClose(); return; }
             var cal = calendarScreen.GetComponent<CalendarController>();
             if (CurrentScreen == calendarScreen && cal.IsEditing) { cal.SetEditing(false); return; }
-            if (history.Count > 1) { CurrentScreen.SetActive(false); history.RemoveAt(history.Count - 1); CurrentScreen.SetActive(true); return; }
+            if (history.Count > 1) { GetComponent<ScheduleWorkbench>()?.ClearMessage(); CurrentScreen.SetActive(false); history.RemoveAt(history.Count - 1); CurrentScreen.SetActive(true); return; }
             App.AndroidBridge.Action("background");
         }
         public void Open(GameObject screen)
         {
             if (screen == null || screen == CurrentScreen) return;
-            CloseModals(); CurrentScreen?.SetActive(false);
+            CloseModals(); GetComponent<ScheduleWorkbench>()?.ClearMessage(); CurrentScreen?.SetActive(false);
             int index = history.IndexOf(screen);
             if (index >= 0) history.RemoveRange(index + 1, history.Count - index - 1);
             else history.Add(screen);
@@ -69,7 +69,7 @@ namespace ShiftCal.UI
         {
             CloseModals(); foreach (var screen in history) if (screen != null) screen.SetActive(false);
             UnityEngine.Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include)?.Hide();
-            calendarScreen.SetActive(false); settingsScreen.SetActive(false); profileScreen.SetActive(false);
+            calendarScreen.SetActive(false); settingsScreen.SetActive(false); manageShiftsScreen.SetActive(false); accountPopup.SetActive(false);
             history.Clear(); history.Add(loginScreen); loginScreen.SetActive(true);
         }
         public void ShowCalendar()
@@ -78,7 +78,12 @@ namespace ShiftCal.UI
             Open(calendarScreen);
         }
         public void ShowSettings() => Open(settingsScreen);
-        public void ShowProfile() => Open(profileScreen);
+        public void ShowManageShifts() => Open(manageShiftsScreen);
+        public void ShowAccount()
+        {
+            if (CurrentScreen != settingsScreen) ShowSettings();
+            accountPopup.SetActive(true); accountPopup.transform.SetAsLastSibling();
+        }
         public void OnGoogleSignInPressed() => Firebase.AuthService.Instance?.SignInWithGoogle();
         public void OnLogoutPressed()
         {

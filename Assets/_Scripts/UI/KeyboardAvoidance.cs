@@ -10,7 +10,8 @@ namespace ShiftCal.UI
         {
             var canvas = GetComponentInParent<Canvas>();
             float height = TouchScreenKeyboard.visible ? TouchScreenKeyboard.area.height / canvas.scaleFactor : 0;
-            rect.offsetMin = original + new Vector2(0, height);
+            var next = original + new Vector2(0, height);
+            if (rect.offsetMin != next) rect.offsetMin = next;
         }
         private void OnDisable() { if (rect != null) rect.offsetMin = original; }
     }
