@@ -8,6 +8,7 @@ namespace ShiftCal.UI
 {
     public class ShiftSettingsController : MonoBehaviour
     {
+        public ShiftEditor editor;
         [SerializeField] private List<ShiftSettingRow> rows = new List<ShiftSettingRow>();
         [SerializeField] private Text validationLabel;
         [SerializeField] private ShiftSettingRow rowPrefab;

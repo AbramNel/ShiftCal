@@ -23,7 +23,7 @@ Existing debug key: C:/Users/simyr/.android/debug.keystore, alias androiddebugke
 SHA-1: 1C:15:7E:8A:18:C6:56:7E:82:E9:B8:F5:EB:C5:05:38:0C:17:7B:76
 SHA-256: A4:C9:C4:97:18:F8:AF:4D:97:48:8C:43:E3:2B:E2:9C:80:8D:C7:14:20:9E:13:3E:86:74:54:D8:D9:58:1D:17
 
-No release key was supplied or created. Before updating an existing installed app, verify its original package and signing certificate. Use that original keystore for an update. Do not uninstall to work around a signing mismatch. No APK has been built, per your updated request.
+No release key was supplied or created. Before updating an existing installed app, verify its original package and signing certificate. Use that original keystore for an update. Do not uninstall to work around a signing mismatch. Development APK verification output is local under Logs/Android and is excluded from Git. No physical-phone installation has been performed.
 
 ## Dedicated Firestore namespace
 

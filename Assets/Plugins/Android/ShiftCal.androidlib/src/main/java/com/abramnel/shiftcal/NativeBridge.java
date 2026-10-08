@@ -35,6 +35,7 @@ public final class NativeBridge {
     }
     public static String action(Activity a,String action,String id){
         try{
+            if(action.equals("background")){a.runOnUiThread(()->a.moveTaskToBack(true));return "";}
             if(action.equals("permissions")){a.runOnUiThread(()->{if(Build.VERSION.SDK_INT>=33)a.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},431);});return "";}
             if(action.equals("exact")){if(Build.VERSION.SDK_INT>=31)a.startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+a.getPackageName())));return "";}
             if(action.equals("fullscreen")){if(Build.VERSION.SDK_INT>=34)a.startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:"+a.getPackageName())));return "";}
@@ -68,6 +69,13 @@ public final class NativeBridge {
         }}catch(Exception e){return "Alarm state could not be read: "+e.getMessage();}
     }
     public static String delivery(Activity a){try{synchronized(AlarmStore.LOCK){return AlarmStore.account(AlarmStore.read(a)).getJSONObject("ledger").toString();}}catch(Exception e){return "{}";}}
+    public static String permissionSummary(Activity a){
+        if(!AlarmScheduler.notifications(a))return "Notifications required • Tap to fix";
+        if(!AlarmScheduler.exact(a))return "Exact alarm access required • Tap to fix";
+        if(!channel(a,"shiftcal_ring")||!channel(a,"shiftcal_reminder"))return "Notification channel disabled • Tap for details";
+        if(Build.VERSION.SDK_INT>=34&&!nm(a).canUseFullScreenIntent())return "Full-screen alarm access missing • Tap for details";
+        return "Alarm permissions ready ✓ • Scheduling details";
+    }
     public static String state(Activity a,String id){try{synchronized(AlarmStore.LOCK){JSONObject e=AlarmStore.account(AlarmStore.read(a)).getJSONObject("ledger").optJSONObject(id);return e==null?"":e.optString("state");}}catch(Exception e){return "";}}
     public static String opened(Activity a){try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);String id=root.optString("pendingOpen");if(id.isEmpty())return "";root.remove("pendingOpen");AlarmStore.write(a,root);JSONObject o=root.optJSONObject("occurrences")==null?null:root.getJSONObject("occurrences").optJSONObject(id);if(o==null){JSONObject state=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);if(state!=null)o=state.optJSONObject("occurrence");}return o==null?"":o.toString();}}catch(Exception e){return "";}}
     public static String specialDeliveries(Activity a){try{synchronized(AlarmStore.LOCK){JSONObject ledger=AlarmStore.account(AlarmStore.read(a)).getJSONObject("ledger");JSONArray items=new JSONArray();Iterator<String> keys=ledger.keys();while(keys.hasNext()){String id=keys.next();JSONObject entry=ledger.getJSONObject(id),o=entry.optJSONObject("occurrence");String state=entry.optString("state");if(o==null)continue;
@@ -79,6 +87,23 @@ public final class NativeBridge {
         a.getWindow().setNavigationBarColor(dark?Color.rgb(20,23,28):Color.rgb(245,247,250));
         a.getWindow().getDecorView().setSystemUiVisibility(dark?0:android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     });return "";}
+    public static String themeBars(Activity a,boolean dark,String background){a.runOnUiThread(()->{
+        a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        int color=Color.parseColor(background);
+        a.getWindow().setStatusBarColor(color);a.getWindow().setNavigationBarColor(color);
+        a.getWindow().getDecorView().setSystemUiVisibility(dark?0:android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+    });return "";}
+    public static String deliveryStates(Activity a){try{synchronized(AlarmStore.LOCK){
+        JSONObject ledger=AlarmStore.account(AlarmStore.read(a)).getJSONObject("ledger");JSONArray items=new JSONArray();
+        Iterator<String> keys=ledger.keys();while(keys.hasNext()){String id=keys.next();JSONObject entry=ledger.getJSONObject(id);
+            items.put(new JSONObject().put("id",id).put("state",entry.optString("state")).put("at",entry.optLong("at",entry.optJSONObject("occurrence")==null?0:entry.getJSONObject("occurrence").optLong("at"))));}
+        return new JSONObject().put("items",items).toString();
+    }}catch(Exception e){return "{\"items\":[]}";}}
+    public static String queuedDeliveries(Activity a){try{synchronized(AlarmStore.LOCK){
+        JSONObject root=AlarmStore.read(a),queue=root.optJSONObject("occurrences");JSONArray items=new JSONArray();
+        if(queue!=null){Iterator<String> keys=queue.keys();while(keys.hasNext())items.put(queue.getJSONObject(keys.next()));}
+        return new JSONObject().put("items",items).toString();
+    }}catch(Exception e){return "{\"items\":[]}";}}
     static void message(String method,String value){try{Class.forName("com.unity3d.player.UnityPlayer").getMethod("UnitySendMessage",String.class,String.class,String.class).invoke(null,"Systems",method,value);}catch(Exception ignored){}}
     static void error(Context c,Exception e){try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(c);root.put("error",e.getMessage()).put("next",JSONObject.NULL);AlarmStore.write(c,root);}}catch(Exception ignored){}}
     public static String signIn(Activity a,String clientId){

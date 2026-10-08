@@ -21,15 +21,49 @@ namespace ShiftCal.UI
         [SerializeField] private Transform shiftChoiceContent;
         private string selectionStart;
         private string selectionEnd;
-        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
-        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; }
+        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; ThemeManager.Changed += Refresh; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
+        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; ThemeManager.Changed -= Refresh; SetEditing(false); }
 
         public DateTime currentMonth;
 
         private readonly Dictionary<string, DayOverrideData> localOverrides = new Dictionary<string, DayOverrideData>();
         private readonly HashSet<string> selectedDateKeys = new HashSet<string>();
         private readonly Dictionary<string, CalendarDayData> visibleDaysByKey = new Dictionary<string, CalendarDayData>();
-        private bool isSelecting;
+        private bool isSelecting, selectionDragged, initiallySelected;
+        private readonly HashSet<string> gestureSelection = new HashSet<string>();
+        public bool IsEditing { get; private set; }
+        public int SelectedCount => selectedDateKeys.Count;
+        public Text editLabel;
+        public GameObject selectionBar;
+        public DayPreview preview;
+        private Dictionary<string, DayInformation> information = new Dictionary<string, DayInformation>();
+        public void ToggleEdit() => SetEditing(!IsEditing);
+        public void SetEditing(bool editing)
+        {
+            IsEditing = editing; ClearSelection(); preview?.Hide(); dayDetailsPopup?.Hide();
+            if (editLabel != null) editLabel.text = editing ? "Done" : "Edit";
+            if (selectionBar != null) selectionBar.SetActive(editing);
+            var grid=GetComponentInChildren<ResponsiveCalendarGrid>(true);if(grid!=null){var rect=(RectTransform)grid.transform;rect.offsetMin=new Vector2(rect.offsetMin.x,editing?310:174);grid.Fit();}
+        }
+        public void ClearSelection()
+        {
+            selectedDateKeys.Clear(); isSelecting = false; selectionStart = selectionEnd = null;
+            HideShiftPicker(); HideRepeatPanel(); UpdateSelectionVisuals();
+        }
+        public void TapDay(string key)
+        {
+            if (IsEditing || !visibleDaysByKey.TryGetValue(key, out var day)) return;
+            var info = information.TryGetValue(key, out var value) ? value : new DayInformation();
+            if (preview != null && preview.gameObject.activeSelf && preview.DateKey == key) { preview.OpenDetails(); return; }
+            preview?.Hide();
+            if (info.HasExtra(day) && preview != null) preview.Show(day, info);
+            else dayDetailsPopup?.Show(day, info);
+        }
+        private void UpdateSelectionVisuals()
+        {
+            foreach (var cell in dayCells) cell.SetSelected(IsEditing && selectedDateKeys.Contains(cell.DateKey ?? ""));
+            UpdateSelectionLabel();
+        }
 
         private Dictionary<string, DayOverrideData> Overrides
         {
@@ -43,20 +77,19 @@ namespace ShiftCal.UI
         private void Start()
         {
             currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            HideShiftPicker();
-            HideRepeatPanel();
+            SetEditing(false);
             Refresh();
         }
 
         public void NextMonth()
         {
-            currentMonth = currentMonth.AddMonths(1);
+            preview?.Hide();currentMonth = currentMonth.AddMonths(1);
             Refresh();
         }
 
         public void PrevMonth()
         {
-            currentMonth = currentMonth.AddMonths(-1);
+            preview?.Hide();currentMonth = currentMonth.AddMonths(-1);
             Refresh();
         }
 
@@ -70,10 +103,12 @@ namespace ShiftCal.UI
 
             GroupData group = ShiftCal.App.AppSession.Instance.CurrentGroup;
             List<CalendarDayData> days = CalendarGenerator.Generate(currentMonth, group, Overrides);
-            var eventCounts=new Dictionary<string,int>();
-            var save=App.AppSession.Instance.Data;
-            foreach(var e in save.events)foreach(var hit in RecurrenceEngine.EventDates(save,e,days[0].date,days[days.Count-1].date))eventCounts[hit.calendarDateKey]=eventCounts.TryGetValue(hit.calendarDateKey,out int n)?n+1:1;
-            foreach(var day in days)day.eventCount=eventCounts.TryGetValue(day.dateKey,out int n)?n:0;
+            // Include in-memory details before SaveLocal synchronizes the serializable list.
+            var save = App.AppSession.Instance.Data;
+            var snapshot = JsonUtility.FromJson<ScheduleSave>(JsonUtility.ToJson(save));
+            snapshot.overrides = new List<DayOverrideData>(Overrides.Values);
+            information = DayInformation.Resolve(snapshot, days[0].date, days[days.Count - 1].date);
+            foreach (var day in days) day.eventCount = information.TryGetValue(day.dateKey, out var info) ? info.events.Count : 0;
             visibleDaysByKey.Clear();
 
             if (uiMonthLabel != null)
@@ -85,9 +120,9 @@ namespace ShiftCal.UI
                 if (day != null)
                     visibleDaysByKey[day.dateKey] = day;
 
-                dayCells[i].Bind(this, day);
+                dayCells[i].Bind(this, day, day != null && information.TryGetValue(day.dateKey, out var info) && info.alarms.Count > 0);
                 if (day != null)
-                    dayCells[i].SetSelected(selectedDateKeys.Contains(day.dateKey));
+                    dayCells[i].SetSelected(IsEditing && selectedDateKeys.Contains(day.dateKey));
             }
 
             UpdateSelectionLabel();
@@ -95,39 +130,33 @@ namespace ShiftCal.UI
 
         public void BeginDaySelection(string dateKey)
         {
+            if (!IsEditing) return;
             isSelecting = true;
-            selectedDateKeys.Clear();
+            selectionDragged = false; initiallySelected = selectedDateKeys.Contains(dateKey);
+            gestureSelection.Clear();gestureSelection.UnionWith(selectedDateKeys);
             selectionStart = selectionEnd = dateKey;
             selectedDateKeys.Add(dateKey);
-            Refresh();
+            UpdateSelectionVisuals();
         }
 
         public void ExtendDaySelection(string dateKey)
         {
-            if (!isSelecting)
+            if (!IsEditing || !isSelecting)
                 return;
 
+            selectionDragged = selectionDragged || dateKey != selectionStart;
             selectionEnd = dateKey;
-            selectedDateKeys.Clear();
+            selectedDateKeys.Clear();selectedDateKeys.UnionWith(gestureSelection);
             DateTime a = DateKeyUtility.FromDateKey(selectionStart), b = DateKeyUtility.FromDateKey(dateKey);
             if (a > b) { var t = a; a = b; b = t; }
             for (var d = a; d <= b; d = d.AddDays(1)) selectedDateKeys.Add(DateKeyUtility.ToDateKey(d));
-            Refresh();
+            UpdateSelectionVisuals();
         }
 
         public void EndDaySelection(string dateKey)
         {
-            isSelecting = false;
-            dateKey = selectionEnd ?? dateKey;
-            Refresh();
-
-            if (selectedDateKeys.Count == 1 && visibleDaysByKey.TryGetValue(dateKey, out CalendarDayData day))
-            {
-                dayDetailsPopup?.Show(day);
-                return;
-            }
-
-            ShowShiftPicker();
+            if (!IsEditing || !isSelecting) return;
+            isSelecting = false;if(!selectionDragged && initiallySelected)selectedDateKeys.Remove(selectionStart); UpdateSelectionVisuals();
         }
 
         public void OpenShiftPickerForSelection()
@@ -162,8 +191,7 @@ namespace ShiftCal.UI
 
         public void ShowRepeatPanel()
         {
-            if (repeatPanel != null)
-                repeatPanel.SetActive(true);
+            if (selectedDateKeys.Count > 0 && repeatPanel != null) { repeatPanel.SetActive(true); repeatPanel.transform.SetAsLastSibling(); }
         }
 
         public void HideRepeatPanel()
@@ -231,8 +259,8 @@ namespace ShiftCal.UI
             GroupData group = ShiftCal.App.AppSession.Instance != null ? ShiftCal.App.AppSession.Instance.CurrentGroup : null;
             List<ShiftTypeDefinitionData> shiftTypes = group != null ? group.shiftTypes.FindAll(x=>!x.retired) : null;
 
-            if (shiftPickerPanel != null)
-                shiftPickerPanel.SetActive(true);
+            if (selectedDateKeys.Count == 0) return;
+            if (shiftPickerPanel != null) { shiftPickerPanel.SetActive(true); shiftPickerPanel.transform.SetAsLastSibling(); }
             while (shiftTypes != null && shiftPickerButtons.Count < shiftTypes.Count && shiftChoicePrefab != null)
             {
                 var button = Instantiate(shiftChoicePrefab, shiftChoiceContent);
@@ -253,7 +281,15 @@ namespace ShiftCal.UI
                 if (i < shiftPickerLabels.Count && shiftPickerLabels[i] != null)
                     shiftPickerLabels[i].text = shiftTypes[i].name + " " + ShiftTimeUtility.FormatHours(shiftTypes[i].hours);
                 shiftPickerButtons[i].targetGraphic.color = ShiftStyleUtility.ToColor(shiftTypes[i].colorHex);
-                shiftPickerLabels[i].color = Color.black;
+                shiftPickerLabels[i].color = ThemeManager.Legible(shiftPickerButtons[i].targetGraphic.color);
+            }
+            if (shiftPickerPanel != null)
+            {
+                var rect=(RectTransform)shiftPickerPanel.transform;
+                float available=((RectTransform)rect.parent).rect.height-350;
+                float height=Mathf.Clamp(190+(shiftTypes?.Count??0)*148,400,Mathf.Max(400,available));
+                rect.anchorMin=Vector2.zero;rect.anchorMax=new Vector2(1,0);rect.pivot=new Vector2(.5f,0);
+                rect.sizeDelta=new Vector2(-48,height);rect.anchoredPosition=new Vector2(0,174);
             }
         }
 
@@ -266,7 +302,7 @@ namespace ShiftCal.UI
         private void UpdateSelectionLabel()
         {
             if (selectionLabel != null)
-                selectionLabel.text = !string.IsNullOrEmpty(App.AppSession.Instance?.Error) ? App.AppSession.Instance.Error : selectedDateKeys.Count == 0 ? "Select days" : selectedDateKeys.Count + " selected";
+                selectionLabel.text = !string.IsNullOrEmpty(App.AppSession.Instance?.Error) ? App.AppSession.Instance.Error : selectedDateKeys.Count == 0 ? "Tap or drag dates" : selectedDateKeys.Count + " selected";
         }
     }
 }

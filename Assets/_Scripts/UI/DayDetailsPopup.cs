@@ -1,103 +1,57 @@
 using ShiftCal.Core;
 using UnityEngine;
 using UnityEngine.UI;
-
 namespace ShiftCal.UI
 {
     public class DayDetailsPopup : MonoBehaviour
     {
         [SerializeField] private GameObject panel;
-        [SerializeField] private Text titleLabel;
-        [SerializeField] private Text shiftLabel;
-        [SerializeField] private Text timeLabel;
-        [SerializeField] private Text hoursLabel;
+        [SerializeField] private Text titleLabel, shiftLabel, timeLabel, hoursLabel, eventsLabel;
         [SerializeField] private Image colorSwatch;
-        [SerializeField] private InputField noteInput;
-        [SerializeField] private InputField personInput;
-        [SerializeField] private Text eventsLabel;
+        [SerializeField] private InputField noteInput, personInput;
+        public CalendarController calendar;
         private CalendarDayData selected;
-
-        private void Awake()
+        private string originalNote, originalPerson;
+        public bool HasChanges => noteInput.text != originalNote || personInput.text != originalPerson;
+        public void Show(CalendarDayData day) => Show(day, null);
+        public void Show(CalendarDayData day, DayInformation info)
         {
-            Hide();
+            if (day == null) return; selected = day;
+            originalNote = day.note ?? ""; originalPerson = day.personName ?? "";
+            noteInput.text = originalNote; personInput.text = originalPerson;
+            titleLabel.text = day.date.ToString("dddd, MMM d, yyyy"); shiftLabel.text = day.shiftName;
+            timeLabel.text = string.IsNullOrWhiteSpace(day.startTime) ? "No scheduled hours" : day.startTime + " – " + day.endTime;
+            hoursLabel.text = ShiftTimeUtility.FormatHours(day.hours); colorSwatch.color = ShiftStyleUtility.ToColor(day.shiftColorHex);
+            if (info == null) { var data = DayInformation.Resolve(App.AppSession.Instance.Data, day.date, day.date); info = data.TryGetValue(day.dateKey, out var value) ? value : new DayInformation(); }
+            if (eventsLabel != null) { eventsLabel.text = string.Join("\n", info.events.ConvertAll(o => o.title + " • " + DayInformation.Time(o))) + "\n" + string.Join("\n", info.alarms.ConvertAll(o => o.title + " • " + DayInformation.Time(o))); eventsLabel.gameObject.SetActive(info.events.Count + info.alarms.Count > 0); }
+            panel.SetActive(true); panel.transform.SetAsLastSibling();
+            var modal = panel.GetComponent<ModalPanel>(); modal.HasChanges = () => HasChanges;
         }
-
-        public void Show(CalendarDayData day)
-        {
-            if (day == null)
-                return;
-            selected = day;
-            if (noteInput != null) noteInput.text = day.note ?? "";
-            if (personInput != null) personInput.text = day.personName ?? "";
-            if (eventsLabel != null)
-            {
-                var names = new System.Collections.Generic.List<string>();
-                var s = App.AppSession.Instance.Data;
-                foreach (var e in s.events)
-                {
-                    foreach (var d in RecurrenceEngine.Dates(e, day.date, day.date))
-                    {
-                        var ex = s.exceptions.Find(x => x.seriesId == e.id && x.originalDate == day.dateKey);
-                        if (ex == null) names.Add(e.title + " / " + e.startTime);
-                    }
-                    foreach (var ex in s.exceptions.FindAll(x => x.seriesId == e.id && !x.cancelled && x.replacement != null && x.replacement.dateKey == day.dateKey)) names.Add(ex.replacement.title + " / " + ex.replacement.startTime);
-                }
-                eventsLabel.text = string.Join("\n", names);
-            }
-
-            if (panel != null)
-                panel.SetActive(true);
-            else
-                gameObject.SetActive(true);
-
-            if (titleLabel != null)
-                titleLabel.text = day.date.ToString("dddd, MMM d, yyyy");
-
-            if (shiftLabel != null)
-                shiftLabel.text = day.shiftName;
-
-            if (timeLabel != null)
-                timeLabel.text = string.IsNullOrWhiteSpace(day.startTime) || string.IsNullOrWhiteSpace(day.endTime)
-                    ? "No time range"
-                    : day.startTime + " - " + day.endTime;
-
-            if (hoursLabel != null)
-                hoursLabel.text = string.IsNullOrEmpty(ShiftTimeUtility.FormatHours(day.hours))
-                    ? "0h"
-                    : ShiftTimeUtility.FormatHours(day.hours);
-
-            if (colorSwatch != null)
-                colorSwatch.color = ShiftStyleUtility.ToColor(day.shiftColorHex);
-        }
-
-        public void Hide()
-        {
-            if (panel != null)
-                panel.SetActive(false);
-            else
-                gameObject.SetActive(false);
-        }
+        public void Hide() => panel.SetActive(false);
+        public void Cancel() => AppNavigation.Instance.Back();
         public void SaveDetails()
         {
             if (selected == null) return;
-            var session = App.AppSession.Instance;
-            session.SetShift(selected.dateKey, selected.ResolvedShift);
-            var data = session.CalendarOverrides[selected.dateKey];
-            data.note = noteInput.text; data.personName = personInput.text;
-            session.SaveLocal(); Hide();
+            App.AppSession.Instance.UpdateDayDetails(selected.dateKey, noteInput.text, personInput.text);
+            App.AppSession.Instance.SaveLocal(); Hide();
         }
         public void Restore()
         {
             if (selected == null) return;
-            var overrides=App.AppSession.Instance.CalendarOverrides;
-            if(overrides.TryGetValue(selected.dateKey,out var details)&&(!string.IsNullOrEmpty(details.note)||!string.IsNullOrEmpty(details.personName)))details.scheduledShift=true;
-            else overrides.Remove(selected.dateKey);
-            App.AppSession.Instance.SaveLocal(); Hide();
+            App.AppSession.Instance.UpdateDayDetails(selected.dateKey, noteInput.text, personInput.text);
+            App.AppSession.Instance.RestoreScheduledShift(selected.dateKey); App.AppSession.Instance.SaveLocal(); Hide();
+        }
+        public void ChangeShift()
+        {
+            if (selected == null) return;
+            System.Action change = () => { Hide(); calendar.SetEditing(true); calendar.BeginDaySelection(selected.dateKey); calendar.EndDaySelection(selected.dateKey); calendar.OpenShiftPickerForSelection(); };
+            if (HasChanges) AppNavigation.Instance.Confirm("Discard unsaved notes before changing the shift?", change); else change();
         }
         public void AddEvent()
         {
             if (selected == null) return;
-            Hide(); Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).NewEvent(selected.dateKey);
+            System.Action open = () => { Hide(); Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).NewEvent(selected.dateKey); };
+            if (HasChanges) AppNavigation.Instance.Confirm("Discard unsaved notes before adding an event?", open); else open();
         }
     }
 }

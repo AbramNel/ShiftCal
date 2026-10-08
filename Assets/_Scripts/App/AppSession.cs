@@ -58,6 +58,7 @@ namespace ShiftCal.App
             {
                 Data = ScheduleStorage.Load(account, CreateDefaultGroup());
                 CurrentGroup = Data.group;
+                UI.ThemeManager.Initialize(Data.dark);
                 foreach (var o in Data.overrides) CalendarOverrides[o.dateKey] = o;
                 loaded = true; Error = "";
                 if(activate){PlayerPrefs.SetString("ShiftCal.ActiveAccount.v3",account);PlayerPrefs.Save();AndroidBridge.Save(Data);}
@@ -109,6 +110,24 @@ namespace ShiftCal.App
             bool used = CurrentGroup.pattern.Contains(id) || new List<DayOverrideData>(CalendarOverrides.Values).Exists(o => o.shiftType == id) || Data.rules.Exists(r => r.shiftType == id);
             reason = used ? "This shift is used by a rotation, date override or alarm rule. Replace those uses before deleting it." : "";
             return !used;
+        }
+
+        public void UpdateDayDetails(string dateKey, string note, string person)
+        {
+            DateKeyUtility.FromDateKey(dateKey);
+            if (!CalendarOverrides.TryGetValue(dateKey, out var details))
+                details = new DayOverrideData { dateKey = dateKey, scheduledShift = true };
+            details.note = note ?? ""; details.personName = person ?? "";
+            details.userId = Data.account; details.updatedAt = DateKeyUtility.UnixMsNow();
+            if (details.scheduledShift && string.IsNullOrWhiteSpace(details.note) && string.IsNullOrWhiteSpace(details.personName)) CalendarOverrides.Remove(dateKey);
+            else CalendarOverrides[dateKey] = details;
+        }
+
+        public void RestoreScheduledShift(string dateKey)
+        {
+            if (!CalendarOverrides.TryGetValue(dateKey, out var details)) return;
+            details.scheduledShift = true; details.updatedAt = DateKeyUtility.UnixMsNow(); details.userId = Data.account;
+            if (string.IsNullOrWhiteSpace(details.note) && string.IsNullOrWhiteSpace(details.personName)) CalendarOverrides.Remove(dateKey);
         }
 
 

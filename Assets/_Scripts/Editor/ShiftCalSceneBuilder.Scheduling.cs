@@ -17,22 +17,22 @@ public static partial class ShiftCalSceneBuilder
         work.eventPanel=CreateScreen("Event Editor",root);
         work.rulePanel=CreateScreen("Shift Alarm Editor",root);
         var agenda=ScreenContent(work.agendaPanel,"Events & alarms");
-        Command(agenda,"Back to calendar",null); // Navigation is wired below.
-        var back=agenda.GetChild(0).GetComponent<Button>();
-        // AppNavigation is added after this builder; WireButtons binds this name.
-        back.name="Agenda Back Button";
-        work.readinessLabel=Body(agenda,"Alarm readiness",240);
-        Command(agenda,"Allow notifications",work.Permissions);
-        Command(agenda,"Exact alarm access",work.ExactAccess);
-        Command(agenda,"Full-screen alarm access",work.FullscreenAccess);
-        Command(agenda,"Test alarm (15 seconds)",work.TestAlarm);
-        Command(agenda,"Add event",work.NewEvent);
-        Command(agenda,"Add shift alarm",work.NewRule);
-        Command(agenda,"Undo skip",work.UndoSkip);
-        GameObject entries=CreateVerticalGroup("Upcoming entries",agenda,20,0,0,0,0);
-        entries.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
-        work.agendaContent=entries.transform;
-        work.rowPrefab=BuildScheduleRowPrefab();
+        var back=CreateButton("Agenda Back Button",work.agendaPanel.transform,"Back",Vector2.zero,Vector2.zero,Color.clear,Primary,38);
+        AnchorStretch(back.GetComponent<RectTransform>(),1,1,1,1,-192,-140,-24,-12);
+        var readiness=Command(agenda,"Alarm readiness",work.TogglePermissions);work.permissionSummary=readiness.GetComponentInChildren<Text>();
+        work.permissionDetails=CreateVerticalGroup("Readiness details",agenda,12,0,0,0,0);work.permissionDetails.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+        work.readinessLabel=Body(work.permissionDetails.transform,"Alarm readiness",230);
+        Command(work.permissionDetails.transform,"Notifications",work.Permissions);Command(work.permissionDetails.transform,"Exact alarms",work.ExactAccess);Command(work.permissionDetails.transform,"Full-screen alarms",work.FullscreenAccess);Command(work.permissionDetails.transform,"Test alarm (15 seconds)",work.TestAlarm);
+        work.permissionDetails.SetActive(false);
+        var add=CreateHorizontalGroup("Add actions",agenda,18,0,0,0,0);AddLayoutElement(add,-1,132);
+        var addEvent=Command(add.transform,"+ Add event",work.NewEvent);var addAlarm=Command(add.transform,"+ Shift alarm",work.NewRule);AddLayoutElement(addEvent.gameObject,0,-1,1);AddLayoutElement(addAlarm.gameObject,0,-1,1);
+        work.undoButton=Command(agenda,"Undo last skip",work.UndoSkip).gameObject;work.undoButton.SetActive(false);
+        var entries=CreateVerticalGroup("Series and rules",agenda,20,0,0,0,0);entries.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+        work.agendaContent=entries.transform;work.rowPrefab=BuildScheduleRowPrefab();
+        var upcoming=Command(agenda,"Upcoming  v",work.ToggleUpcoming);work.upcomingLabel=upcoming.GetComponentInChildren<Text>();
+        work.upcomingSection=CreateVerticalGroup("Upcoming section",agenda,20,0,0,0,0);work.upcomingSection.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+        var occurrences=CreateVerticalGroup("Individual deliveries",work.upcomingSection.transform,20,0,0,0,0);occurrences.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+        work.upcomingContent=occurrences.transform;work.showMore=Command(work.upcomingSection.transform,"Show more",work.MoreUpcoming);work.upcomingSection.SetActive(false);
 
         var form=ScreenContent(work.eventPanel,"Event");
         work.eventFields.Add(Field(form,"title","Title"));
@@ -58,7 +58,7 @@ public static partial class ShiftCalSceneBuilder
         work.eventFields.Add(Field(form,"snooze","Snooze minutes"));
         work.editScope=Choice(form,"Apply edit / deletion to",new[]{"This occurrence","This and future","Entire series"});
         Command(form,"Delete event",work.DeleteEvent);
-        EditorFooter(work.eventPanel,work.SaveEvent,work.ShowAgenda);
+        EditorFooter(work.eventPanel,work.SaveEvent,work.CancelEditor);
 
         var rule=ScreenContent(work.rulePanel,"Shift alarm");
         work.ruleShift=Choice(rule,"Shift",new[]{"Day-12"});
@@ -68,21 +68,22 @@ public static partial class ShiftCalSceneBuilder
         work.ruleSound=Choice(rule,"Sound",new[]{"Device alarm","Device notification","Silent"});
         work.ruleFields.Add(Field(rule,"snooze","Snooze minutes"));work.ruleFields.Add(Field(rule,"advance","Upcoming notice minutes (0 = off)"));
         Command(rule,"Delete alarm rule",work.DeleteRule);
-        EditorFooter(work.rulePanel,work.SaveRule,work.ShowAgenda);
+        EditorFooter(work.rulePanel,work.SaveRule,work.CancelEditor);
 
         var profileContent=FindChild(profile.transform,"Options Scroll Content");
         work.accountLabel=FindChild(profile.transform,"Account Label").GetComponent<Text>();
         work.syncLabel=FindChild(profile.transform,"Sync Label").GetComponent<Text>();
         AddLayoutElement(work.syncLabel.gameObject,-1,180);
-        work.darkToggle=FindChild(profile.transform,"Dark Mode Toggle").GetComponent<Toggle>();
+        work.themeChoice=FindChild(profile.transform,"Theme").GetComponent<Dropdown>();
         Command(profileContent,"Events & alarms",work.ShowAgenda);
         Command(profileContent,"Retry sync",work.Retry);
         Command(profileContent,"Import this device's local calendar",work.ImportLocal);
-        work.groupName=Field(profileContent,"groupName","New group name");Command(profileContent,"Create group",work.CreateGroup);
-        work.inviteEmail=Field(profileContent,"inviteEmail","Invite Google account email");Command(profileContent,"Create invitation",work.Invite);
-        work.invitation=Field(profileContent,"invitation","Invitation code");Command(profileContent,"Join invited group",work.Join);
-        work.memberChoice=Choice(profileContent,"Group member",new[]{"No members loaded"});Command(profileContent,"Refresh group members",work.Members);Command(profileContent,"Remove selected member",work.RemoveMember);Command(profileContent,"Leave shared group",work.LeaveGroup);
-        Command(profileContent,"Conflicts: keep my edits",work.KeepMine);Command(profileContent,"Conflicts: use remote edits",work.UseRemote);
+        var groupContent=Expandable(profileContent,"Shared groups & sync");
+        work.groupName=Field(groupContent,"groupName","New group name");Command(groupContent,"Create group",work.CreateGroup);
+        work.inviteEmail=Field(groupContent,"inviteEmail","Invite Google account email");Command(groupContent,"Create invitation",work.Invite);
+        work.invitation=Field(groupContent,"invitation","Invitation code");Command(groupContent,"Join invited group",work.Join);
+        work.memberChoice=Choice(groupContent,"Group member",new[]{"No members loaded"});Command(groupContent,"Refresh group members",work.Members);Command(groupContent,"Remove selected member",work.RemoveMember);Command(groupContent,"Leave shared group",work.LeaveGroup);
+        Command(groupContent,"Conflicts: keep my edits",work.KeepMine);Command(groupContent,"Conflicts: use remote edits",work.UseRemote);
         Command(profileContent,"Export local backup",work.ExportBackup);
 
         var loginContent=FindChild(login.transform,"Login Content");
@@ -107,8 +108,9 @@ public static partial class ShiftCalSceneBuilder
     private static RectTransform ScreenContent(GameObject screen,string title)
     {
         CreateTopBar(screen.transform,title,false);
+        if(screen.name.EndsWith("Editor")){screen.AddComponent<ModalPanel>().dismissOutside=false;screen.AddComponent<KeyboardAvoidance>();}
         var content=CreateScrollContent(title+" Scroll",screen.transform,24,36,36,24,40,out _);
-        AnchorStretch(content.parent.parent.GetComponent<RectTransform>(),0,0,1,1,20,116,-20,-174);
+        AnchorStretch(content.parent.parent.GetComponent<RectTransform>(),0,0,1,1,20,156,-20,-174);
         return content;
     }
     private static void EditorFooter(GameObject screen,UnityEngine.Events.UnityAction save,UnityEngine.Events.UnityAction cancel)
@@ -124,20 +126,20 @@ public static partial class ShiftCalSceneBuilder
     }
     private static InputField Field(Transform content,string key,string label,bool multiline=false)
     {
-        Body(content,label,56);
-        var input=CreateInputField(key,content,label);AddLayoutElement(input.gameObject,-1,multiline?220:128);
+        Body(content,label,label.Length>42?90:56);
+        var input=CreateInputField(key,content,label);AddLayoutElement(input.gameObject,-1,multiline?240:132);
         input.textComponent.fontSize=42;
         if(multiline)input.lineType=InputField.LineType.MultiLineNewline;
         return input;
     }
     private static Text Body(Transform content,string text,float height)
     {
-        var label=CreateText(text.Length==0?"Status":text,content,text,40,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);
+        var label=CreateText(text.Length==0?"Status":text,content,text,38,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);
         AddLayoutElement(label.gameObject,-1,height);return label;
     }
     private static Button Command(Transform content,string text,UnityEngine.Events.UnityAction action,UnityEngine.Events.UnityAction unused=null)
     {
-        var b=CreateButton(text,content,text,Vector2.zero,Vector2.zero,Input,Primary,40);AddLayoutElement(b.gameObject,-1,144);
+        var b=CreateButton(text,content,text,Vector2.zero,Vector2.zero,Input,Primary,38);AddLayoutElement(b.gameObject,-1,132);
         if(action!=null)UnityEventTools.AddPersistentListener(b.onClick,action);return b;
     }
     private static Toggle Check(Transform content,string label,bool initial=true,float height=120)
@@ -149,7 +151,7 @@ public static partial class ShiftCalSceneBuilder
     }
     private static Dropdown Choice(Transform content,string label,string[] values)
     {
-        Body(content,label,56);
+        Body(content,label,label.Length>42?90:56);
         var root=CreatePanel(label,content,Input);AddLayoutElement(root,-1,128);
         var drop=root.AddComponent<Dropdown>();drop.targetGraphic=root.GetComponent<Image>();
         var caption=CreateText("Value",root.transform,values[0],34,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(caption.rectTransform,0,0,1,1,24,8,-60,-8);drop.captionText=caption;
@@ -166,11 +168,12 @@ public static partial class ShiftCalSceneBuilder
     }
     private static ScheduleListRow BuildScheduleRowPrefab()
     {
-        var obj=CreateVerticalGroup("ScheduleListRow",null,16,20,20,20,20);obj.AddComponent<Image>().color=CardSoft;AddLayoutElement(obj,-1,344);
-        var row=obj.AddComponent<ScheduleListRow>();row.title=Body(obj.transform,"Title",60);row.title.fontStyle=FontStyle.Bold;row.subtitle=Body(obj.transform,"Detail",144);row.subtitle.fontSize=36;
-        var buttons=CreateHorizontalGroup("Actions",obj.transform,14,0,0,0,0);AddLayoutElement(buttons,-1,116);
-        row.first=Command(buttons.transform,"Edit",null);row.second=Command(buttons.transform,"Skip",null);row.third=Command(buttons.transform,"Delete",null);
-        foreach(var b in new[]{row.first,row.second,row.third})AddLayoutElement(b.gameObject,0,-1,1);
+        var obj=CreateVerticalGroup("ScheduleListRow",null,10,24,24,20,20);var image=obj.AddComponent<Image>();image.sprite=Rounded;image.type=Image.Type.Sliced;image.color=CardSoft;AddLayoutElement(obj,-1,300);
+        obj.AddComponent<Button>().targetGraphic=image;
+        var row=obj.AddComponent<ScheduleListRow>();row.title=Body(obj.transform,"Title",58);row.title.fontSize=42;row.title.fontStyle=FontStyle.Bold;row.subtitle=Body(obj.transform,"Detail",112);row.subtitle.fontSize=34;
+        var buttons=CreateHorizontalGroup("Actions",obj.transform,14,0,0,0,0);AddLayoutElement(buttons,-1,104);
+        row.first=Command(buttons.transform,"Edit",null);row.second=Command(buttons.transform,"Pause",null);row.third=Command(buttons.transform,"Upcoming",null);
+        foreach(var button in new[]{row.first,row.second,row.third}){AddLayoutElement(button.gameObject,0,104,1);button.GetComponentInChildren<Text>().fontSize=34;}
         BakeThemes(obj.transform);
         var prefab=PrefabUtility.SaveAsPrefabAsset(obj,PrefabFolder+"/ScheduleListRow.prefab");Object.DestroyImmediate(obj);return prefab.GetComponent<ScheduleListRow>();
     }
@@ -183,13 +186,15 @@ public static partial class ShiftCalSceneBuilder
     {
         foreach(var graphic in root.GetComponentsInChildren<Graphic>(true))
         {
-            if(graphic.GetComponentInParent<CalendarDayCell>()!=null||graphic.GetComponentInParent<ShiftSettingRow>()!=null&&graphic.name=="ColorSwatch")continue;
+            if(graphic.GetComponentInParent<ThemeSample>(true)!=null||graphic.name=="Logo"||graphic.name=="Chosen color"||graphic.name=="Day Details Color"||graphic.name=="Preview shift color"||graphic.name.StartsWith("Color #")||graphic.name=="Theme preview"||graphic.GetComponentInParent<CalendarDayCell>(true)!=null||graphic.GetComponentInParent<ShiftSettingRow>(true)!=null&&graphic.name=="ColorSwatch")continue;
             ThemeManager.Role? role=null;Color color=graphic.color;
-            if(graphic is Text){if(color==TextDark||color==Color.white)role=ThemeManager.Role.Text;else if(color==TextMuted)role=ThemeManager.Role.Muted;else if(color==Primary)role=ThemeManager.Role.Accent;}
+            if(graphic is Text){if(color==TextDark||color==Color.white)role=ThemeManager.Role.Text;else if(color==Danger)role=ThemeManager.Role.Destructive;else if(color==Hex("#04111F"))role=ThemeManager.Role.OnAccent;else if(color==TextMuted)role=ThemeManager.Role.Muted;else if(color==Primary)role=ThemeManager.Role.Accent;}
             else if(color==Background||color==Header)role=ThemeManager.Role.Background;
             else if(color==Card||color==CardSoft)role=ThemeManager.Role.Surface;
             else if(color==Input)role=ThemeManager.Role.Input;
-            if(role.HasValue){var t=graphic.GetComponent<ThemeManager>()??graphic.gameObject.AddComponent<ThemeManager>();t.role=role.Value;graphic.color=color;}
+            else if(color==Hex("#020617F7"))role=ThemeManager.Role.Elevated;
+            else if(color==Primary)role=ThemeManager.Role.Accent;else if(color==Danger)role=ThemeManager.Role.Destructive;
+            if(role.HasValue){var t=graphic.GetComponent<ThemeManager>()??graphic.gameObject.AddComponent<ThemeManager>();t.role=role.Value;t.Paint();}
         }
     }
     private static void ConfigureAndroid()
