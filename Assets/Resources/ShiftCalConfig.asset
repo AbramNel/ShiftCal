@@ -12,4 +12,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 41c6f7be770668343a8ff387288b9cd1, type: 3}
   m_Name: ShiftCalConfig
   m_EditorClassIdentifier: Assembly-CSharp::ShiftCal.App.ShiftCalConfig
-  webClientId: 
+  webClientId: 656443327052-dipd9ni7dhekmqrjp3h5addvqvhrii9l.apps.googleusercontent.com
