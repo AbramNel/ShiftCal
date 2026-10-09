@@ -1,3 +1,5 @@
+See [FAMILY_CALENDAR.md](FAMILY_CALENDAR.md) for the family migration, updated deployment procedure, and device-only alarm boundary.
+
 # ShiftCal Setup
 
 ## Run locally now
@@ -20,8 +22,8 @@ The established Android package is **com.abramnel.shiftcal**. Preserve this iden
 8. In Unity, run Assets > External Dependency Manager > Android Resolver > Force Resolve after configuration. Firebase Auth, Firestore, App and EDM4U are already installed from official local package archives; do not import duplicate copies.
 
 Existing debug key: C:/Users/simyr/.android/debug.keystore, alias androiddebugkey.
-SHA-1: 05:9E:79:3E:46:F5:06:73:07:0A:09:6D:45:3E:33:F3:A3:22:1A:2F
-SHA-256: FA:DE:29:64:21:8D:28:30:94:82:69:04:A6:6D:92:97:F4:14:29:B4:1C:13:11:47:37:6B:5D:8A:1E:1A:77:F0
+SHA-1: 1C:15:7E:8A:18:C6:56:7E:82:E9:B8:F5:EB:C5:05:38:0C:17:7B:76
+SHA-256: A4:C9:C4:97:18:F8:AF:4D:97:48:8C:43:E3:2B:E2:9C:80:8D:C7:14:20:9E:13:3E:86:74:54:D8:D9:58:1D:17
 
 These fingerprints were rechecked against the existing keystore and the built APK. The key itself and the project's signing settings were not changed.
 
@@ -32,19 +34,19 @@ No release key was supplied or created. Before updating an existing installed ap
 All new cloud data uses /shiftcal/v1. The old firestore.rules and firebase.json are preserved. The implemented schema is in firestore.shiftcal.rules. If the Firebase project serves other apps, merge ONLY the ShiftCal match block and its helper functions into the existing deployed rules, retaining other apps' rules. Do not deploy the old starter rules or replace the whole shared project's rules with the standalone ShiftCal file.
 
 Personal calendar: /shiftcal/v1/users/{uid}/calendar/{record}.
-Private alarm definitions: /shiftcal/v1/users/{uid}/records/{record}.
+Legacy alarm backups only: /shiftcal/v1/users/{uid}/records/{record}. The updated app never listens to or writes this collection; wake rules and subscriptions are stored only on this device.
 Shared calendar: /shiftcal/v1/groups/{group}/records/{record}.
 Membership and invitations: the group's members and invites subcollections.
 
-Records have key, json, deleted, revision and author fields, explicitly serialized as Firestore dictionaries. Each shift, override, event, exception, alarm rule and rotation is a separate record. Transactions compare revisions. Deletions remain tombstones. Conflicts keep both versions and require a Keep mine / Use remote choice in Settings > Data & Sharing > Shared Groups.
+Records have key, json, deleted, revision and author fields, explicitly serialized as Firestore dictionaries. Each shift, override, event, exception, activity, activity exception, family profile, shared activity template and rotation is a separate record. Alarm definitions and device templates are excluded. Transactions compare revisions. Deletions remain tombstones. Conflicts keep both versions and require a Keep mine / Use remote choice in Settings > Data & Sharing > Shared Groups.
 
-Owners manage group definitions, rotation and membership. Members can edit shared date overrides and calendar events. Invitations are bound to a verified Google email and expire after seven days. The owner cannot remove themselves or leave their owned group; ownership transfer is not implemented. Other members can leave. Removed members cannot sync new shared changes; previously cached offline calendar copies are not remotely erased.
+Owners manage group definitions, rotation and membership. Members can edit shared date overrides, calendar events, activities, assignment exceptions and shared templates. Only the owner manages family profiles. Anonymous authentication cannot write. Invitations are bound to a verified Google email and expire after seven days. The owner cannot remove themselves or leave their owned group; ownership transfer is not implemented. Other members can leave. Removed members cannot sync new shared changes; previously cached offline calendar copies are not remotely erased.
 
 Cloud calendars remain accessible offline after sign-in. Switching/sign-out detaches listeners and cancels the previous account's native alarms. Existing local data imports only when you explicitly choose the import button. Group switches retain archive files. Private preferences cannot be read or changed by another UID.
 
 ## Recurrence and alarms
 
-Work rotations use device-local shift start times and date overrides. New events use "device" time; existing IANA zones, UTC and optional end times are preserved when saving the compact form. Monthly events clamp to the last day when the original day is unavailable. DST gaps advance by the transition length; repeated clock times use the earlier instant. End dates are inclusive; counts include canceled occurrences in the original series. This-and-future edits split the series and remove its future exceptions.
+Work rotations use device-local shift start times and date overrides. New family activities preserve their calendar zone (America/Chicago by default); legacy event editors use "device" time; existing IANA zones, UTC and optional end times are preserved when saving the compact form. Monthly events clamp to the last day when the original day is unavailable. DST gaps advance by the transition length; repeated clock times use the earlier instant. End dates are inclusive; counts include canceled occurrences in the original series. Legacy event future edits retain their existing split behavior. Family activity future edits transfer future exceptions to the split series and adjust remaining occurrence counts.
 
 Calendar cancellation affects the shared event. Pause on phone and Skip this affect this device only. Separate event reminders and audible alarms have distinct occurrence identities. Shift-linked events reuse ShiftAlarmRule and its stable ID, without generating duplicate EventSeries records. Relative timing subtracts real elapsed minutes from the resolved shift start and can deliver on the previous day; fixed timing uses the matching shift date's local clock time. Calendar indicators stay on the qualifying shift date. OFF or different-shift overrides remove the original rule's delivery; restoring the shift reconciles it without reviving explicitly dismissed/skipped occurrences. Untimed shifts support fixed-time rules; relative rules require a start time. Alarm OFF on a new linked event is calendar-only, while old silent-notification rules retain their behavior.
 
@@ -60,9 +62,9 @@ Alarm volume, notification channel settings and Do Not Disturb remain under Andr
 
 ## Local verification completed
 
-Unity compiled the Firebase-enabled code and passed 906 focused checks for scene Save-button workflows, picker selection/cancellation, recurrence scopes, shift timing/overrides, legacy metadata, migration/recovery, account separation, sync conflicts, DST and portrait geometry. Runtime UI checks passed 78 assertions with 0 errors, including real weekday raycasts/clicks, picker Back cancellation, immediate preference persistence, themes, navigation and canvas frames. The check run generated 225 Canvas renders covering 25 screens/states, all three themes and 360x640, 393x851 and 412x915. Native Android Java compilation, library manifest processing and lint completed successfully; all 23 recurrence, policy and Robolectric delivery/UI tests passed. The isolated demo-shiftcal Firestore emulator passed 19 authorization/revision/tombstone and backward-compatible rule-record checks without accessing a real Firebase project.
+Unity compiled the Firebase-enabled code and passed 974 focused assertions plus 74 family assertions covering shared activities, recurrence scopes, assignments, filters, conflict handling, simulated device alarm isolation, migration/recovery and portrait geometry. Play-mode checks passed 131 assertions with zero errors, including Back confirmation, icon selection, profiles, templates, agenda, planner, gestures and canvas frames. The integrated checks generated 315 Canvas renders across all three themes at 360x640, 393x851 and 412x915. All 24 native JUnit/Robolectric tests passed, including an account-scoped read-only migration test. The isolated demo-shiftcal emulator passed 53 security/revision/tombstone assertions without accessing production data.
 
-Lint reports 0 errors and 5 non-blocking warnings for dependency versions, English-only native text and API-27 manifest attributes; Android 8 has explicit window-flag fallbacks. An integrated non-development Unity Android APK was built at Logs/Android/ShiftCal-ui.apk using the existing package/signing configuration. No Android device is attached. Real Google/cloud login, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
+A non-development ARM64 APK was built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Certificate verification and the APK hash are saved in `Logs/Android/family-apk-verification.txt`. No Android device is attached. Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
 
 ## Phone verification later
 

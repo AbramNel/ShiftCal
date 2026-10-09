@@ -17,6 +17,10 @@ namespace ShiftCal.UI
         private Vector2 fittedSize;
         private System.DateTime shownToday;
         private readonly List<RaycastResult> hits = new List<RaycastResult>();
+        public Image[] activityIcons,activityFrames;
+        public Text activityOverflow;
+        private List<ActivityOccurrence> activities=new List<ActivityOccurrence>();
+        public void Activities(List<ActivityOccurrence> items){activities=items;presentationPending=true;}
         public string DateKey => day?.dateKey;
         public bool IsSelected => selectedOutline != null && selectedOutline.enabled;
         public void Bind(CalendarController owner, CalendarDayData data, bool hasAlarm = false)
@@ -26,7 +30,7 @@ namespace ShiftCal.UI
             uiBackground.color = normalColor;
             foreach (var text in new[]{uiDayNumberLabel,uiShiftNameLabel,uiHoursLabel,uiNoteLabel}) if (text != null) text.color = ThemeManager.Legible(normalColor);
             uiDayNumberLabel.text = day.date.Day.ToString(); uiShiftNameLabel.text = Short(day.shiftName, 9);
-            if (uiHoursLabel != null) uiHoursLabel.text = ShiftTimeUtility.FormatHours(day.hours);
+            if (uiHoursLabel != null) {uiHoursLabel.text="";uiHoursLabel.gameObject.SetActive(false);}
             if (uiNoteLabel != null) uiNoteLabel.text = Short(day.note, 11);
             if (dimOverlay != null) { dimOverlay.gameObject.SetActive(!day.isCurrentMonth); dimOverlay.color = ThemeManager.Token(ThemeManager.Role.DimmedDate); }
             if (noteIcon != null) { noteIcon.gameObject.SetActive(!string.IsNullOrWhiteSpace(day.note)); noteIcon.color = ThemeManager.Legible(normalColor); }
@@ -52,8 +56,12 @@ namespace ShiftCal.UI
             string shift = FitText(uiShiftNameLabel, day.shiftName), note = FitText(uiNoteLabel, day.note);
             if (uiShiftNameLabel.text != shift) uiShiftNameLabel.text = shift;
             if (uiNoteLabel.text != note) uiNoteLabel.text = note;
-            SetVisible(uiNoteLabel.gameObject, size.y >= 160 && !string.IsNullOrWhiteSpace(day.note));
-            if (uiHoursLabel != null) SetVisible(uiHoursLabel.gameObject, size.y >= 185 && day.hours > 0);
+            SetVisible(uiNoteLabel.gameObject, activities.Count==0 && size.y >= 160 && !string.IsNullOrWhiteSpace(day.note));
+            if (uiHoursLabel != null) SetVisible(uiHoursLabel.gameObject,false);
+            if(activityIcons!=null){int capacity=size.x>=125?3:2;int shown=Mathf.Min(capacity,activities.Count);if(activities.Count>capacity)shown--;
+                for(int i=0;i<activityIcons.Length;i++){activityIcons[i].transform.parent.gameObject.SetActive(i<shown);if(i>=shown)continue;var a=activities[i].activity;activityIcons[i].sprite=ActivityIconSet.Load().Get(a.icon);activityIcons[i].color=ThemeManager.Legible(normalColor);Color border;if(!ColorUtility.TryParseHtmlString(App.AppSession.Instance.Data.profiles.Find(x=>x.id==a.assigneeId)?.color??"#64748B",out border))border=Color.gray;activityFrames[i].color=border;}
+                activityOverflow.text=activities.Count>shown?"+"+(activities.Count-shown):"";activityOverflow.color=ThemeManager.Legible(normalColor);
+            }
         }
         private static void SetVisible(GameObject target, bool visible) { if (target.activeSelf != visible) target.SetActive(visible); }
         public void UpdateToday(System.DateTime today)
@@ -88,13 +96,14 @@ namespace ShiftCal.UI
         public void OnPointerDown(PointerEventData data)
         {
             if (data.button != PointerEventData.InputButton.Left) return;
-            pressed = data.position; dragged = false;
+            pressed = data.position; dragged = false; controller?.gesture?.Begin(data.position);
             if (controller != null && day != null && controller.IsEditing) controller.BeginDaySelection(day.dateKey);
         }
         public void OnPointerUp(PointerEventData data)
         {
             if (controller == null || day == null || data.button != PointerEventData.InputButton.Left) return;
             if (controller.IsEditing) controller.EndDaySelection(day.dateKey);
+            else if (controller.gesture?.Finish(data.position)==true) {}
             else if (!dragged && Vector2.Distance(pressed, data.position) < 16) controller.TapDay(day.dateKey);
         }
         public void OnBeginDrag(PointerEventData data) => dragged = true;

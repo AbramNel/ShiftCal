@@ -14,11 +14,12 @@ namespace ShiftCal.Firebase
         public bool HasCachedAccess => PlayerPrefs.HasKey("ShiftCal.ActiveAccount.v3");
         public string UserId { get; private set; }
         public string DisplayName { get; private set; }
+        public string Email { get; private set; }
         public string Status { get; private set; } = "";
         private bool busy;
         private int generation;
         private bool restored;
-        private void Awake(){if(Instance!=null){Destroy(this);return;}Instance=this;LocalMode=PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3")=="local";DisplayName=PlayerPrefs.GetString("ShiftCal.AccountLabel","On this device");}
+        private void Awake(){if(Instance!=null){Destroy(this);return;}Instance=this;LocalMode=PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3")=="local";DisplayName=PlayerPrefs.GetString("ShiftCal.AccountLabel","On this device");Email=PlayerPrefs.GetString("ShiftCal.AccountEmail","");}
         public void SignIn()=>SignInWithGoogle();
         public void UseLocal(){SignOut();LocalMode=true;DisplayName="On this device";AppSession.Instance.SwitchAccount("local");}
         public void SignInWithGoogle()
@@ -69,9 +70,9 @@ namespace ShiftCal.Firebase
 #if SHIFT_CAL_USE_FIREBASE
             FirebaseBootstrap.Instance?.Auth?.SignOut();
 #endif
-            PlayerPrefs.DeleteKey("ShiftCal.ActiveAccount.v3");PlayerPrefs.DeleteKey("ShiftCal.AccountLabel");PlayerPrefs.Save();
+            PlayerPrefs.DeleteKey("ShiftCal.ActiveAccount.v3");PlayerPrefs.DeleteKey("ShiftCal.AccountLabel");PlayerPrefs.DeleteKey("ShiftCal.AccountEmail");PlayerPrefs.Save();
             PlayerPrefs.SetInt("ShiftCal.CloudSignedOut",1);PlayerPrefs.Save();
-            IsSignedIn=false;LocalMode=false;UserId="";DisplayName="";busy=false;restored=true;
+            IsSignedIn=false;LocalMode=false;UserId="";DisplayName="";Email="";busy=false;restored=true;
         }
 #if SHIFT_CAL_USE_FIREBASE
         private void Apply(FirebaseUser user){
@@ -79,7 +80,7 @@ namespace ShiftCal.Firebase
             if(!google){FirebaseBootstrap.Instance.Auth.SignOut();Status="A Google account is required for cloud sign-in.";return;}
             IsSignedIn=true;LocalMode=false;UserId=user.UserId;DisplayName=string.IsNullOrEmpty(user.DisplayName)?user.Email:user.DisplayName;
             PlayerPrefs.DeleteKey("ShiftCal.CloudSignedOut");
-            PlayerPrefs.SetString("ShiftCal.AccountLabel",DisplayName);
+            Email=user.Email;PlayerPrefs.SetString("ShiftCal.AccountEmail",Email??"");PlayerPrefs.SetString("ShiftCal.AccountLabel",DisplayName);
             Status="Signed in";AppSession.Instance.SwitchAccount(UserId);
         }
 #endif

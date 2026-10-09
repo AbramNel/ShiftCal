@@ -21,6 +21,8 @@ namespace ShiftCal.UI
         private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; ThemeManager.Changed -= Refresh; SetEditing(false); }
 
         public DateTime currentMonth;
+        public CalendarGestureController gesture;
+        public void OpenDate(DateTime date){currentMonth=new DateTime(date.Year,date.Month,1);SetEditing(false);Refresh();TapDay(DateKeyUtility.ToDateKey(date));}
 
         private readonly Dictionary<string, DayOverrideData> localOverrides = new Dictionary<string, DayOverrideData>();
         private readonly HashSet<string> selectedDateKeys = new HashSet<string>();
@@ -116,6 +118,7 @@ namespace ShiftCal.UI
                 if (day != null)
                     visibleDaysByKey[day.dateKey] = day;
 
+                dayCells[i].Activities(day!=null && information.TryGetValue(day.dateKey,out var activityInfo)?activityInfo.activities:new List<ActivityOccurrence>());
                 dayCells[i].Bind(this, day, day != null && information.TryGetValue(day.dateKey, out var info) && info.alarms.Count > 0);
                 if (day != null)
                     dayCells[i].SetSelected(IsEditing && selectedDateKeys.Contains(day.dateKey));

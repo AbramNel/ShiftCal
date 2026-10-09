@@ -76,7 +76,7 @@ public static class ShiftCalChecks
         Check(migrated.group.name=="My old schedule"&&migrated.group.pattern.SequenceEqual(new[]{2,1,2,1})&&migrated.overrides[0].personName=="Abram","legacy migration preserves original rotation and labels even with missing presets");
         EditorSceneManager.OpenScene("Assets/Calendar.unity");
         var session=Object.FindFirstObjectByType<AppSession>();AppSession.Instance=session;
-        typeof(AppSession).GetProperty("Data").SetValue(session,new ScheduleSave{group=Group()});session.CurrentGroup=Group();
+        typeof(AppSession).GetProperty("Data").SetValue(session,new ScheduleSave{account="focused-scene-"+Guid.NewGuid().ToString("N"),group=Group()});session.CurrentGroup=Group();
         session.CalendarOverrides["2026-07-01"]=new DayOverrideData{dateKey="2026-07-01",shiftType=2,note="Preserved",personName="Abram"};session.SetShift("2026-07-01",1);
         Check(session.CalendarOverrides["2026-07-01"].note=="Preserved"&&session.CalendarOverrides["2026-07-01"].personName=="Abram","shift editing preserves note/person");
         Check(!session.CanDeleteShift(2,out _),"in-use shift deletion blocked");
@@ -109,9 +109,11 @@ public static class ShiftCalChecks
         foreach(var b in Object.FindObjectsByType<Button>(FindObjectsInactive.Include,FindObjectsSortMode.None))for(int i=0;i<b.onClick.GetPersistentEventCount();i++)Check(b.onClick.GetPersistentTarget(i)!=null&&!string.IsNullOrEmpty(b.onClick.GetPersistentMethodName(i)),"button wiring: "+b.name);
         Check(!Object.FindObjectsByType<Text>(FindObjectsInactive.Include,FindObjectsSortMode.None).Any(t=>t.text.Contains("11:29")),"fake system status removed");
         RefinementChecks(session,cal,work);
+        FamilyCalendarChecks.Run(session,cal,work);
         foreach(var size in new[]{new Vector2Int(360,640),new Vector2Int(393,851),new Vector2Int(412,915)})Capture(size,cal,work);
         Debug.Log("ShiftCal focused checks passed: "+checks);
     }
+    private static void DeviceSnapshot(ScheduleSave data){typeof(DeviceCalendarStore).GetProperty("State").SetValue(null,new DeviceCalendarState{account=data.account,rules=ActivityResolver.CloneList(data.rules),subscriptions=data.events.Select(DeviceCalendarStore.FromEvent).ToList(),mutedEvents=new List<string>(data.mutedEvents),mutedRules=new List<string>(data.mutedRules)});}
     private static void EventEditorChecks(AppSession session,ScheduleWorkbench work)
     {
         var previous=session.Data;
@@ -143,7 +145,7 @@ public static class ShiftCalChecks
             var occurrence=RecurrenceEngine.ShiftDates(data,date,date).Single();
             Check(occurrence.at==RecurrenceEngine.Instant(date,"04:00","device")&&occurrence.calendarDateKey=="2026-10-09","relative rule anchored to resolved shift date");
             rule.timingMode=ShiftTimingMode.FixedTime;rule.fixedTime="03:45";rule.calendarOnly=true;rule.audible=false;
-            var info=DayInformation.Resolve(data,date,date)["2026-10-09"];
+            DeviceSnapshot(data);var info=DayInformation.Resolve(data,date,date)["2026-10-09"];
             Check(info.events.Count==1&&info.alarms.Count==0,"Alarm OFF rule visible once without any notification indicator");
             Check(info.events[0].at==RecurrenceEngine.Instant(date,"03:45","device"),"fixed clock time matches qualifying shift date");
             work.LoadRule(rule,"2026-10-09");Check(!work.advancedButton.activeSelf&&!work.eventAlarm.interactable,"single shift occurrence exposes delivery controls only");
@@ -151,15 +153,15 @@ public static class ShiftCalChecks
             data.overrides[0].shiftType=2;Check(RecurrenceEngine.ShiftDates(data,date,date).Count==1,"restoring shift restores qualifying date");
             data.group.shiftTypes[1].name="Renamed";Check(RecurrenceEngine.ShiftDates(data,date,date).Single().id==occurrence.id,"rename preserves occurrence identity");
             var legacy=new EventSeries{title="Legacy reminder",dateKey="2026-10-08",startTime="04:00",endTime="05:00",zone="America/Chicago",alarm=false,reminder=true,reminderMinutes=0,sound="notification",vibration=false,snoozeMinutes=7,advanceMinutes=25};data.events.Add(legacy);
-            work.EditEvent(legacy.id,legacy.dateKey);work.eventFields.Find(f=>f.name=="notes").text="Saved notes";work.SaveEvent();
+            DeviceSnapshot(data);work.EditEvent(legacy.id,legacy.dateKey);work.eventFields.Find(f=>f.name=="notes").text="Saved notes";work.SaveEvent();
             var saved=data.events.Single();
             Check(saved.id==legacy.id&&saved.zone==legacy.zone&&saved.endTime==legacy.endTime&&saved.advanceMinutes==25,"saving compact form preserves hidden legacy fields and ID");
-            Check(!saved.alarm&&saved.reminder&&saved.reminderMinutes==0&&saved.sound=="notification"&&!saved.vibration&&saved.snoozeMinutes==7&&saved.notes=="Saved notes","reminder-only and explicit alarm overrides survive saving");
-            saved.sound="legacy-device-sound";work.EditEvent(saved.id,saved.dateKey);work.SaveEvent();Check(data.events.Single().sound=="legacy-device-sound","unchanged legacy sound value survives compact edit");
+            var local=DeviceCalendarStore.Find(saved.id);Check(!saved.alarm&&!saved.reminder&&local.reminder&&local.reminderMinutes==0&&local.sound=="notification"&&!local.vibration&&local.snoozeMinutes==7&&saved.notes=="Saved notes","reminder-only and explicit alarm overrides survive saving");
+            DeviceCalendarStore.Find(saved.id).sound="legacy-device-sound";saved.sound="legacy-device-sound";work.EditEvent(saved.id,saved.dateKey);work.SaveEvent();Check(DeviceCalendarStore.Find(saved.id).sound=="legacy-device-sound","unchanged legacy sound value survives compact edit");
             var restored=JsonUtility.FromJson<ShiftAlarmRule>("{\"id\":\"old\",\"shiftType\":2,\"beforeMinutes\":90}");
             Check(restored.timingMode==ShiftTimingMode.BeforeStart&&!restored.calendarOnly&&!restored.useDefaultAlarmSettings,"missing model fields preserve old shift-rule semantics");
             FirestoreService.Apply(data,"rule/"+rule.id,JsonUtility.ToJson(rule),false);
-            Check(data.rules.Single().timingMode==ShiftTimingMode.FixedTime&&data.rules.Single().calendarOnly,"new rule fields survive Firestore record parsing");
+            Check(data.rules.Single().timingMode==ShiftTimingMode.FixedTime&&data.rules.Single().calendarOnly,"legacy remote rule parsing cannot alter local rule definitions");
             var monthly=new EventSeries{title="Month end",dateKey="2026-01-31",startTime="04:00",zone="UTC",endTime="05:00",recurrence=RecurrenceKind.Monthly,count=5};data.events.Add(monthly);
             var replacement=new EventSeries{title="Changed occurrence",dateKey="2026-02-28",startTime="06:00",zone="America/Chicago"};
             data.exceptions.Add(new EventException{id="changed",seriesId=monthly.id,originalDate="2026-02-28",replacement=replacement});
@@ -204,10 +206,10 @@ public static class ShiftCalChecks
         string future=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(1));
         var e=session.Data.events[0];e.dateKey=future;e.alarm=true;e.reminder=true;e.weekdays=new List<int>{(int)DateTime.Today.AddDays(1).DayOfWeek};
         session.Data.overrides=new List<DayOverrideData>(session.CalendarOverrides.Values);
-        var info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
+        DeviceSnapshot(session.Data);var info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
         Check(info[future].events.Count(o=>o.isEvent)==1&&info[future].alarms.Count(o=>o.isEvent)==2,"event counted once while alarm and reminder remain separate");
-        session.Data.mutedEvents.Add(e.id);info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
-        Check(info[future].events.Count(o=>o.isEvent)==1&&info[future].alarms.Count(o=>o.isEvent)==0,"paused/view-only event has no alarm indicator");session.Data.mutedEvents.Clear();
+        session.Data.mutedEvents.Add(e.id);DeviceSnapshot(session.Data);info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
+        Check(info[future].events.Count(o=>o.isEvent)==1&&info[future].alarms.Count(o=>o.isEvent)==0,"paused/view-only event has no alarm indicator");session.Data.mutedEvents.Clear();DeviceSnapshot(session.Data);
         var replacement=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(e));replacement.dateKey=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(2));
         session.Data.exceptions.Add(new EventException{seriesId=e.id,originalDate=future,replacement=replacement});info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
         Check(info[replacement.dateKey].events.Count(o=>o.isEvent)==1&&info[replacement.dateKey].alarms.Count(o=>o.isEvent)==2,"moved exception uses intended calendar date");session.Data.exceptions.Clear();
@@ -371,7 +373,7 @@ public static class ShiftCalChecks
             if(screen=="Day-Preview") {var corners=new Vector3[4];cal.preview.card.GetWorldCorners(corners);Check(corners.All(p=>{var point=RectTransformUtility.WorldToScreenPoint(camera,p);return point.y>=24&&point.y<=size.y-24;}),"preview stays in safe area "+size+" / "+theme);}
             var grid=cal.GetComponentsInChildren<GridLayoutGroup>(true).First(x=>x.constraintCount==7);var bounds=((RectTransform)grid.transform).rect;
             Check(grid.cellSize.x*7+grid.spacing.x*6<=bounds.width+1&&grid.cellSize.y*6+grid.spacing.y*5<=bounds.height+1,"42 cells fit "+size+" / "+screen+" / "+theme);
-            if(screen=="Calendar Screen") { var cell=cal.GetComponentsInChildren<CalendarDayCell>(true).First(c=>c.DateKey==date); var image=cell.GetComponent<Image>(); Check(image.color==ThemeManager.ShiftColor(AppSession.Instance.CurrentGroup.shiftTypes[1].colorHex)&&cell.GetComponentsInChildren<ThemeManager>(true).Length==0,"calendar retains custom shift color "+theme); }
+            if(screen=="Calendar Screen") { var cell=cal.GetComponentsInChildren<CalendarDayCell>(true).First(c=>c.DateKey==date); var image=cell.GetComponent<Image>(); Check(image.color==ThemeManager.ShiftColor(CalendarGenerator.Generate(cal.currentMonth,AppSession.Instance.CurrentGroup,AppSession.Instance.CalendarOverrides).First(x=>x.dateKey==date).shiftColorHex)&&cell.GetComponentsInChildren<ThemeManager>(true).Length==0,"calendar retains custom shift color "+theme); }
             camera.Render();RenderTexture.active=rt;var tex=new Texture2D(size.x,size.y,TextureFormat.RGB24,false);tex.ReadPixels(new Rect(0,0,size.x,size.y),0,0);tex.Apply();
             File.WriteAllBytes("Logs/UI/"+theme+"-"+screen.Replace(" ","-")+"-"+size.x+"x"+size.y+".png",tex.EncodeToPNG());Object.DestroyImmediate(tex);confirmation.Cancel();
         }

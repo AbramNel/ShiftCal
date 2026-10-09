@@ -79,6 +79,7 @@ public class ShiftCalRuntimeProbe
             Check(choiceScroll.verticalNormalizedPosition>.99f&&picker.choices.GetComponentsInChildren<ShiftChoiceRow>().Length>0,"runtime bulk picker reopens at visible choices");nav.Back();yield return null;nav.Back();yield return null;Check(!cal.IsEditing&&cal.SelectedCount==0,"runtime Back exits edit selection");
             cal.NextMonth();yield return null;cal.PrevMonth();yield return null;nav.ShowSettings();yield return null;
         }
+        var family=FamilyRuntimeChecks.Exercise(Check);while(family.MoveNext())yield return null;
         for(int i=0;i<8;i++)yield return null;
         Application.logMessageReceived -= Log;
         foreach(var error in errors)Debug.LogWarning("UI runtime failure: "+error);

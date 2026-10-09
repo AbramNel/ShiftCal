@@ -12,5 +12,7 @@ namespace ShiftCal.Data
         public List<int> pattern = new List<int>();
         public List<ShiftTypeDefinitionData> shiftTypes = new List<ShiftTypeDefinitionData>();
         public string startDateKey;
+        public string shiftOwnerProfileId;
+        public string ownerUid;
     }
 }

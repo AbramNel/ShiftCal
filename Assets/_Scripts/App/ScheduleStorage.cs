@@ -53,7 +53,7 @@ namespace ShiftCal.App
         {
             var legacy=JsonUtility.FromJson<ScheduleSave>(original);
             if(legacy?.group==null)throw new InvalidDataException("Legacy calendar has no group.");
-            var result=new ScheduleSave{group=legacy.group,overrides=legacy.overrides??new System.Collections.Generic.List<DayOverrideData>()};
+            var result=new ScheduleSave{group=legacy.group,overrides=legacy.overrides??new System.Collections.Generic.List<DayOverrideData>(),events=legacy.events??new System.Collections.Generic.List<EventSeries>(),exceptions=legacy.exceptions??new System.Collections.Generic.List<EventException>(),rules=legacy.rules??new System.Collections.Generic.List<ShiftAlarmRule>(),mutedEvents=legacy.mutedEvents??new System.Collections.Generic.List<string>(),mutedRules=legacy.mutedRules??new System.Collections.Generic.List<string>(),activities=legacy.activities??new System.Collections.Generic.List<CalendarActivity>(),activityExceptions=legacy.activityExceptions??new System.Collections.Generic.List<ActivityException>(),profiles=legacy.profiles??new System.Collections.Generic.List<FamilyProfile>(),templates=legacy.templates??new System.Collections.Generic.List<ActivityTemplate>()};
             if(result.group.shiftTypes==null)result.group.shiftTypes=new System.Collections.Generic.List<ShiftTypeDefinitionData>();
             foreach(var preset in defaults.shiftTypes)if(!result.group.shiftTypes.Exists(x=>x.id==preset.id))result.group.shiftTypes.Add(JsonUtility.FromJson<ShiftTypeDefinitionData>(JsonUtility.ToJson(preset)));
             Validate(result,"local");return result;
@@ -63,6 +63,11 @@ namespace ShiftCal.App
             if (s == null || s.version > 3 || s.group == null || s.account != account) throw new InvalidDataException("Invalid version or account.");
             Core.DateKeyUtility.FromDateKey(s.group.startDateKey);
             if (s.group.pattern == null || s.group.shiftTypes == null || s.overrides == null || s.events == null || s.exceptions == null || s.rules == null || s.records == null) throw new InvalidDataException("Missing calendar lists.");
+            s.activities = s.activities ?? new System.Collections.Generic.List<CalendarActivity>();
+            s.activityExceptions = s.activityExceptions ?? new System.Collections.Generic.List<ActivityException>();
+            s.profiles = s.profiles ?? new System.Collections.Generic.List<FamilyProfile>();
+            s.templates = s.templates ?? new System.Collections.Generic.List<ActivityTemplate>();
+            foreach (var a in s.activities) if (!Core.ActivityResolver.Validate(a,out var issue)) throw new InvalidDataException(issue);
             foreach (var o in s.overrides) Core.DateKeyUtility.FromDateKey(o.dateKey);
             foreach (var e in s.events) if (!Core.RecurrenceEngine.Validate(e, out var error)) throw new InvalidDataException(error);
         }
@@ -72,7 +77,7 @@ namespace ShiftCal.App
             string path = PathFor(s.account), temp = path + ".tmp";
             using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                byte[] bytes = Encoding.UTF8.GetBytes(JsonUtility.ToJson(s));
+                byte[] bytes = Encoding.UTF8.GetBytes(JsonUtility.ToJson(DeviceCalendarStore.SharedCopy(s)));
                 stream.Write(bytes, 0, bytes.Length); stream.Flush(true);
             }
             if (File.Exists(path))

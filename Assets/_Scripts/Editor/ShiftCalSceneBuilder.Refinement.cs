@@ -168,7 +168,7 @@ public static partial class ShiftCalSceneBuilder
         ModalHeader(card.transform,"Account / Profile",modal);
         var content=CreateScrollContent("Account details",card.transform,24,28,28,12,24,out var scroll);
         AnchorStretch(scroll.GetComponent<RectTransform>(),0,0,1,1,0,12,0,-160);
-        var name=CreateText("Account Details Label",content,"On this device",44,TextDark,TextAnchor.MiddleLeft,FontStyle.Bold);AddLayoutElement(name.gameObject,-1,64);
+        var name=CreateText("Account Details Label",content,"On this device",44,TextDark,TextAnchor.MiddleLeft,FontStyle.Bold);AddLayoutElement(name.gameObject,-1,-1);
         var state=CreateText("Account State Label",content,"Local calendar on this device",36,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);AddLayoutElement(state.gameObject,-1,-1);
         Command(content,"Connect Google account",null);
         var logout=Command(content,"Sign out",null);logout.name="Logout Button";logout.GetComponentInChildren<Text>().color=Danger;

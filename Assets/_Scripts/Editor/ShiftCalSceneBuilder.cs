@@ -59,6 +59,7 @@ public static partial class ShiftCalSceneBuilder
         GameObject settingsScreen = CreateMainSettingsScreen(uiRoot.transform);
         GameObject accountPopup = CreateAccountPopup(uiRoot.transform);
         CreateSchedulingUI(uiRoot.transform, settingsScreen, accountPopup, loginScreen);
+        CreateFamilyUI(uiRoot.transform, settingsScreen, calendarScreen);
 
         calendarScreen.SetActive(false);
         settingsScreen.SetActive(false);
@@ -83,6 +84,7 @@ public static partial class ShiftCalSceneBuilder
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
         AssetDatabase.SaveAssets();
+        NormalizeSavedYaml();
         AssetDatabase.Refresh();
         Debug.Log("ShiftCal permanent Canvas scene and prefabs built.");
     }
@@ -96,8 +98,7 @@ public static partial class ShiftCalSceneBuilder
         AnchorStretch(day.rectTransform,0,1,0,1,10,-54,66,-8);
         var shift=CreateText("ShiftName",root.transform,"Day-12",30,TextDark,TextAnchor.MiddleLeft,FontStyle.Bold);
         AnchorStretch(shift.rectTransform,0,.43f,1,.43f,10,-24,-8,24);shift.horizontalOverflow=HorizontalWrapMode.Overflow;
-        var hours=CreateText("Hours",root.transform,"12h",27,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);
-        AnchorStretch(hours.rectTransform,0,.22f,1,.22f,10,-14,-8,18);
+        Text hours=null;
         var note=CreateText("Note",root.transform,"",26,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);
         AnchorStretch(note.rectTransform,0,0,1,0,10,8,-8,40);note.horizontalOverflow=HorizontalWrapMode.Overflow;
         var noteIcon=CreateImage("Note indicator",root.transform,TextDark);noteIcon.sprite=Icon("Note");noteIcon.raycastTarget=false;
@@ -112,6 +113,7 @@ public static partial class ShiftCalSceneBuilder
         AnchorStretch(selection.rectTransform,0,0,1,1,2,2,-2,-2);
         AddOutline(selection.gameObject,Background);
         SetObjectField(cell,"uiBackground",background);SetObjectField(cell,"uiDayNumberLabel",day);SetObjectField(cell,"uiShiftNameLabel",shift);SetObjectField(cell,"uiHoursLabel",hours);SetObjectField(cell,"uiNoteLabel",note);
+        CreateCellActivityBadges(cell,root.transform);
         SetObjectField(cell,"selectedOutline",selection);SetObjectField(cell,"todayOutline",today);SetObjectField(cell,"dimOverlay",dim);SetObjectField(cell,"noteIcon",noteIcon);SetObjectField(cell,"alarmIcon",alarm);
         var prefab=PrefabUtility.SaveAsPrefabAsset(root,PrefabFolder+"/CalendarDayCell.prefab");Object.DestroyImmediate(root);return prefab;
     }
@@ -126,7 +128,7 @@ public static partial class ShiftCalSceneBuilder
         var title=CreateText("Shift name",labels.transform,"Day-12",42,TextDark,TextAnchor.MiddleLeft,FontStyle.Bold);AddLayoutElement(title.gameObject,-1,54);
         var time=CreateText("Hours summary",labels.transform,"5:30 AM – 5:30 PM • 12h",34,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);AddLayoutElement(time.gameObject,-1,52);
         var chevron=CreateText("Edit affordance",root.transform,">",42,Primary,TextAnchor.MiddleCenter,FontStyle.Normal);AddLayoutElement(chevron.gameObject,50,-1);
-        SetObjectField(row,"uiColorSwatch",swatch);SetObjectField(row,"uiNameLabel",title);SetObjectField(row,"uiTimeLabel",time);BakeThemes(root.transform);
+        SetObjectField(row,"uiColorSwatch",swatch);SetObjectField(row,"uiNameLabel",title);SetObjectField(row,"uiTimeLabel",time);ReplaceNavigationGlyphs(root.transform);BakeThemes(root.transform);
         var prefab=PrefabUtility.SaveAsPrefabAsset(root,PrefabFolder+"/ShiftSettingRow.prefab");Object.DestroyImmediate(root);return prefab;
     }
 
@@ -338,7 +340,7 @@ public static partial class ShiftCalSceneBuilder
         var shift=Body(header.transform,"Shift",70);AddLayoutElement(shift.gameObject,0,70,1);
         var time=Body(content,"Time",58);var hours=Body(content,"Hours",48);var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
         var person=Field(content,"person","Person (optional)");var note=Field(content,"note","Notes",true);
-        Command(content,"Change shift",popup.ChangeShift);Command(content,"Restore scheduled shift",popup.Restore);Command(content,"Add event",popup.AddEvent);
+        Command(content,"Change shift",popup.ChangeShift);Command(content,"Restore scheduled shift",popup.Restore);Command(content,"Add activity / note",popup.AddEvent);
         var footer=CreateHorizontalGroup("Editor actions",card.transform,18,24,24,12,12);AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,0,8,0,150);
         var save=Command(footer.transform,"Save",popup.SaveDetails);AddLayoutElement(save.gameObject,0,-1,1);save.GetComponent<Image>().color=Primary;save.GetComponentInChildren<Text>().color=Hex("#04111F");
         SetObjectField(popup,"panel",overlay);SetObjectField(popup,"titleLabel",title);SetObjectField(popup,"shiftLabel",shift);SetObjectField(popup,"timeLabel",time);SetObjectField(popup,"hoursLabel",hours);

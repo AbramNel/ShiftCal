@@ -63,14 +63,15 @@ namespace ShiftCal.UI
             if(loginStatus!=null)loginStatus.text=AuthService.Instance.Status;
             var auth = AuthService.Instance;
             string identity = string.IsNullOrWhiteSpace(auth.DisplayName) ? "On this device" : auth.DisplayName;
-            if(accountLabel!=null)accountLabel.text=identity + "  >";
-            if(accountDetailsLabel!=null)accountDetailsLabel.text=identity;
+            if(accountLabel!=null)accountLabel.text=identity;
+            if(accountDetailsLabel!=null)accountDetailsLabel.text=identity+(string.IsNullOrEmpty(auth.Email)?"":"\n"+auth.Email);
             if(accountStateLabel!=null)accountStateLabel.text=(auth.IsSignedIn ? "Google account connected" : auth.LocalMode || AppSession.Instance.Data.account == "local" ? "Local calendar on this device" : auth.HasCachedAccess ? "Offline access to your saved account" : "No Google account connected") + "\n" + auth.Status + "\n" + FirestoreService.Instance.Status;
+            if(AppNavigation.Instance!=null){var connect=AppNavigation.Instance.GetComponentsInChildren<Button>(true).FirstOrDefault(x=>x.name=="Connect Google account");if(connect!=null)connect.gameObject.SetActive(!auth.IsSignedIn);}
             if(syncLabel!=null)syncLabel.text=string.Join("\n",new[]{FirestoreService.Instance.Status,AppSession.Instance.Error,ScheduleStorage.Status}.Where(s=>!string.IsNullOrWhiteSpace(s)));
             string signature=string.Join("|",FirestoreService.Instance.MemberLabels);
             if(memberChoice!=null&&signature!=memberSignature){memberSignature=signature;memberChoice.ClearOptions();memberChoice.AddOptions(FirestoreService.Instance.MemberLabels.Count==0?new List<string>{"No members loaded"}:FirestoreService.Instance.MemberLabels);}
             if(readinessLabel!=null&&agendaPanel.activeSelf){readinessLabel.text=AndroidBridge.Readiness();permissionSummary.text=AndroidBridge.Call<string>("permissionSummary")??"Alarm readiness - Android device required";}
-            if(AuthService.Instance.HasCachedAccess){string opened=AndroidBridge.Call<string>("opened");if(!string.IsNullOrEmpty(opened)){var hit=JsonUtility.FromJson<Occurrence>(opened);if(hit.id.StartsWith("event:")&&Save.events.Exists(e=>e.id==hit.sourceId))EditEvent(hit.sourceId,hit.dateKey);else if(Save.rules.Exists(r=>r.id==hit.sourceId)){editingRule=hit.sourceId;LoadRule(Save.rules.Find(r=>r.id==hit.sourceId),hit.dateKey);}else ShowAgenda();}}
+            if(AuthService.Instance.HasCachedAccess){string opened=AndroidBridge.Call<string>("opened");if(!string.IsNullOrEmpty(opened)){var hit=JsonUtility.FromJson<Occurrence>(opened);if(hit.sourceId!=null&&hit.sourceId.StartsWith("activity-")){var family=GetComponent<FamilyWorkbench>();var d=DateKeyUtility.FromDateKey(string.IsNullOrEmpty(hit.calendarDateKey)?hit.dateKey:hit.calendarDateKey);var item=ActivityResolver.Resolve(Save,d,d).FirstOrDefault(x=>"activity-"+x.seriesId==hit.sourceId&&x.originalDate==hit.dateKey);if(item!=null)family.Details(item);}else if(hit.id.StartsWith("event:")&&Save.events.Exists(e=>e.id==hit.sourceId))EditEvent(hit.sourceId,hit.dateKey);else if(Save.rules.Exists(r=>r.id==hit.sourceId)){editingRule=hit.sourceId;LoadRule(Save.rules.Find(r=>r.id==hit.sourceId),hit.dateKey);}else ShowAgenda();}}
         }
         public void Hide(){agendaPanel.SetActive(false);eventPanel.SetActive(false);if(messageLabel!=null)messageLabel.text="";}
         public void ShowAgenda(){ CloseEditors(); if (AppNavigation.Instance != null) AppNavigation.Instance.Open(agendaPanel); else agendaPanel.SetActive(true); agendaPanel.SetActive(true); Refresh(); }
@@ -125,6 +126,7 @@ namespace ShiftCal.UI
             editingEvent=id; editingRule=null; ruleTemplate=null; originalDate=date;
             var ex=Save.exceptions.Find(x=>x.seriesId==id&&x.originalDate==date);
             var copy=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(ex?.replacement??e));
+            DeviceCalendarStore.Apply(copy,DeviceCalendarStore.Find(id,date));
             if(ex?.replacement==null)copy.dateKey=date;
             LoadEvent(copy);
         }
@@ -223,7 +225,8 @@ namespace ShiftCal.UI
                     Save.events.Add(e);
                 }
                 else { e.id=old.id; Save.events.Remove(old);Save.events.Add(e); }
-                AppSession.Instance.SaveLocal();ShowAgenda();
+                var subscription=DeviceCalendarStore.FromEvent(e);subscription.sourceId=old!=null&&editScope.value==0?old.id:e.id;subscription.originalDate=old!=null&&editScope.value==0&&old.recurrence!=RecurrenceKind.Once?originalDate:null;DeviceCalendarStore.Subscribe(subscription);
+                e.alarm=false;e.reminder=false;AppSession.Instance.SaveLocal();ShowAgenda();
             }
             catch(Exception ex){Message(ex.Message);}
         }
@@ -327,12 +330,12 @@ namespace ShiftCal.UI
             readinessLabel.text=AndroidBridge.Readiness();
             if (permissionSummary != null) permissionSummary.text = AndroidBridge.Call<string>("permissionSummary") ?? "Alarm readiness - Android device required";
             upcomingSection.SetActive(upcomingOpen);
-            upcomingLabel.text = upcomingOpen ? "Upcoming  ^" : "Upcoming  v";
+            upcomingLabel.text = "Upcoming";
             if (undoButton != null) undoButton.SetActive(!string.IsNullOrEmpty(undoId));
             try
             {
                 long now=DateKeyUtility.UnixMsNow();
-                var occurrences=RecurrenceEngine.Resolve(Save,DateTime.Today.AddDays(-1),DateTime.Today.AddYears(2));
+                var occurrences=RecurrenceEngine.Resolve(DeviceCalendarStore.Effective(Save),DateTime.Today.AddDays(-1),DateTime.Today.AddYears(2));
                 var states=AndroidBridge.DeliveryStates();
                 foreach(var o in occurrences)
                     if(states.TryGetValue(o.id,out var state)&&state.state=="snoozed"){o.at=state.at;o.state=state.state;}
@@ -363,7 +366,7 @@ namespace ShiftCal.UI
                 foreach(var o in upcoming.Take(upcomingLimit))
                 {
                     bool skipped=o.state=="skipped",ringing=o.state=="ringing",view=o.id.EndsWith(":view")||o.state=="view"||string.IsNullOrEmpty(queuedJson)&&!skipped&&!ringing;
-                    Action edit=()=>{if(o.isEvent)EditEvent(o.sourceId,o.dateKey);else{var rule=Save.rules.Find(x=>x.id==o.sourceId);if(rule!=null){editingRule=rule.id;LoadRule(rule,o.dateKey);}}};
+                    Action edit=()=>{if(o.isEvent&&o.sourceId.StartsWith("activity-")){var family=GetComponent<FamilyWorkbench>();var d=DateKeyUtility.FromDateKey(o.calendarDateKey??o.dateKey);var item=ActivityResolver.Resolve(Save,d,d).FirstOrDefault(x=>"activity-"+x.seriesId==o.sourceId&&x.originalDate==o.dateKey);if(item!=null)family.Details(item);}else if(o.isEvent)EditEvent(o.sourceId,o.dateKey);else{var rule=Save.rules.Find(x=>x.id==o.sourceId);if(rule!=null){editingRule=rule.id;LoadRule(rule,o.dateKey);}}};
                     RowTo(upcomingContent,o.title,DayInformation.Time(o)+(string.IsNullOrEmpty(o.state)?" • Device time":" • "+o.state),view?"Edit":skipped?"Undo skip":ringing?"Dismiss":"Skip",()=>{if(view){edit();return;}AndroidBridge.Action(skipped?"undo":ringing?"dismiss":"skip",o.id);undoId=skipped?null:o.id;Refresh();},ringing?"Snooze":view?"":"Edit",ringing?(Action)(()=>{AndroidBridge.Action("snooze",o.id);Refresh();}):view?null:edit,"",null);
                 }
             }catch(Exception ex){Message(ex.Message);}

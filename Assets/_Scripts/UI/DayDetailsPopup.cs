@@ -11,8 +11,13 @@ namespace ShiftCal.UI
         [SerializeField] private Image colorSwatch;
         [SerializeField] private InputField noteInput, personInput;
         public CalendarController calendar;
+        public FamilyWorkbench family;
+        public Transform activityContent;
         private CalendarDayData selected;
         private string originalNote, originalPerson;
+        private void OnEnable(){if(App.AppSession.Instance!=null)App.AppSession.Instance.Changed+=RefreshActivities;}
+        private void OnDisable(){if(App.AppSession.Instance!=null)App.AppSession.Instance.Changed-=RefreshActivities;}
+        private void RefreshActivities(){if(selected!=null&&activityContent!=null)family?.FillDay(selected.dateKey,activityContent);}
         public bool HasChanges => noteInput.text != originalNote || personInput.text != originalPerson;
         public void Show(CalendarDayData day) => Show(day, null);
         public void Show(CalendarDayData day, DayInformation info)
@@ -30,6 +35,7 @@ namespace ShiftCal.UI
                     .Concat(info.alarms.Where(o=>o.isEvent).Select(o=>o.title+" • "+DayInformation.Time(o))));
                 eventsLabel.gameObject.SetActive(info.events.Count + info.alarms.Count > 0);
             }
+            family?.FillDay(day.dateKey,activityContent);
             panel.SetActive(true); panel.transform.SetAsLastSibling();
             var modal = panel.GetComponent<ModalPanel>(); modal.HasChanges = () => HasChanges;
         }
@@ -64,7 +70,7 @@ namespace ShiftCal.UI
         public void AddEvent()
         {
             if (selected == null) return;
-            System.Action open = () => { Hide(); Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).NewEvent(selected.dateKey, selected.ResolvedShift); };
+            System.Action open = () => { Hide(); family.editor.New(selected.dateKey); };
             if (HasChanges) AppNavigation.Instance.Confirm("Discard unsaved notes before adding an event?", open); else open();
         }
     }

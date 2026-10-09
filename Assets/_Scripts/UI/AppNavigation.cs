@@ -82,6 +82,7 @@ namespace ShiftCal.UI
         public void ShowAccount()
         {
             if (CurrentScreen != settingsScreen) ShowSettings();
+            foreach(var b in accountPopup.GetComponentsInChildren<Button>(true))if(b.name=="Connect Google account")b.gameObject.SetActive(Firebase.AuthService.Instance?.IsSignedIn!=true);
             accountPopup.SetActive(true); accountPopup.transform.SetAsLastSibling();
         }
         public void OnGoogleSignInPressed() => Firebase.AuthService.Instance?.SignInWithGoogle();

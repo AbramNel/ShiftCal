@@ -23,6 +23,17 @@ public class NativeAlarmTest {
         AlarmStore.write(context,root);assertTrue("Store file exists: "+context.getFilesDir(),AlarmStore.file(context).getBaseFile().exists());assertEquals(root.toString(),AlarmStore.read(context).toString());NativeBridge.channels(context);
     }
     JSONObject occurrence(String id,long at) throws Exception{return OccurrenceEngine.make(id,"r","2026-07-01","Wake Up",at,true,new JSONObject().put("snoozeMinutes",7).put("sound","silent").put("vibration",false));}
+    @Test public void migrationEvidenceIsAccountScopedAndNeverChangesDelivery() throws Exception{
+        account.getJSONObject("save").getJSONArray("rules").put(new JSONObject().put("id","original-wake").put("shiftType",2));
+        account.getJSONObject("ledger").put("test:skipped",new JSONObject().put("state","skipped"));
+        AlarmStore.write(context,root);
+        Activity activity=Robolectric.buildActivity(Activity.class).setup().get();
+        String before=AlarmStore.read(context).toString();
+        assertEquals("original-wake",new JSONObject(NativeBridge.savedDefinitions(activity,"test-account")).getJSONArray("rules").getJSONObject(0).getString("id"));
+        assertEquals("",NativeBridge.savedDefinitions(activity,"second-account"));
+        assertEquals(before,AlarmStore.read(context).toString());
+        activity.finish();
+    }
     @Test public void openRingingDismissesOnlyThatOccurrence() throws Exception{
         JSONObject first=occurrence("test:first",System.currentTimeMillis()),other=occurrence("test:other",System.currentTimeMillis());
         account.getJSONObject("ledger").put("test:first",new JSONObject().put("state","ringing").put("occurrence",first)).put("test:other",new JSONObject().put("state","ringing").put("occurrence",other));

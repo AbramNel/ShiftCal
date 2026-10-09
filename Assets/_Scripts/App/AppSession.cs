@@ -39,6 +39,7 @@ namespace ShiftCal.App
                 Data.group = CurrentGroup;
                 Data.overrides = new List<DayOverrideData>(CalendarOverrides.Values);
                 Firebase.FirestoreService.Instance?.TrackChanges(Data);
+                DeviceCalendarStore.Capture(Data);
                 ScheduleStorage.Write(Data);
                 if(alarmsActive)AndroidBridge.Save(Data);
                 Error = "";
@@ -57,7 +58,9 @@ namespace ShiftCal.App
             CalendarOverrides.Clear();
             try
             {
+                bool existed = System.IO.File.Exists(ScheduleStorage.PathFor(account)) || account == "local" && PlayerPrefs.HasKey(ScheduleStorage.LegacyKey);
                 Data = ScheduleStorage.Load(account, CreateDefaultGroup());
+                DeviceCalendarStore.Load(Data, existed);
                 CurrentGroup = Data.group;
                 UI.ThemeManager.Initialize(Data.dark);
                 foreach (var o in Data.overrides) CalendarOverrides[o.dateKey] = o;
@@ -71,6 +74,7 @@ namespace ShiftCal.App
 
         public void ApplyRemote()
         {
+            DeviceCalendarStore.Hydrate(Data);
             CurrentGroup = Data.group;
             CalendarOverrides.Clear();
             foreach (var o in Data.overrides) CalendarOverrides[o.dateKey] = o;
@@ -89,7 +93,7 @@ namespace ShiftCal.App
             var local = ScheduleStorage.Load("local", CreateDefaultGroup());
             Data.group = JsonUtility.FromJson<GroupData>(JsonUtility.ToJson(local.group));
             Data.overrides = local.overrides;
-            Data.events = local.events; Data.exceptions = local.exceptions; Data.rules = local.rules;
+            Data.events = local.events; Data.exceptions = local.exceptions; Data.activities=local.activities; Data.activityExceptions=local.activityExceptions; Data.profiles=local.profiles; Data.templates=local.templates;
             ApplyRemote(); SaveLocal();
         }
 

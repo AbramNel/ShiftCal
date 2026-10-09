@@ -90,6 +90,10 @@ namespace ShiftCal.Data
         public List<EventSeries> events = new List<EventSeries>();
         public List<EventException> exceptions = new List<EventException>();
         public List<ShiftAlarmRule> rules = new List<ShiftAlarmRule>();
+        public List<CalendarActivity> activities = new List<CalendarActivity>();
+        public List<ActivityException> activityExceptions = new List<ActivityException>();
+        public List<FamilyProfile> profiles = new List<FamilyProfile>();
+        public List<ActivityTemplate> templates = new List<ActivityTemplate>();
         public List<SyncRecord> records = new List<SyncRecord>();
         public List<string> mutedEvents = new List<string>();
         public List<string> mutedRules = new List<string>();

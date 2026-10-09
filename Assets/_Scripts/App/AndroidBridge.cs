@@ -23,7 +23,7 @@ namespace ShiftCal.App
         }
         public static void Save(ScheduleSave save)
         {
-            string error = Call<string>("commit", JsonUtility.ToJson(save));
+            string error = Call<string>("commit", JsonUtility.ToJson(DeviceCalendarStore.Effective(save)));
             if (!string.IsNullOrEmpty(error)) Status = error;
         }
         public static string Readiness()

@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10db79d86fdc4124983c97a103462ece, type: 3}
+  m_Name: ActivityIcons
+  m_EditorClassIdentifier: Assembly-CSharp::ShiftCal.UI.ActivityIconSet
+  sprites:
+  - {fileID: 21300000, guid: 53f8bb074567f5545b9d01b34a238a04, type: 3}
+  - {fileID: 21300000, guid: 390ce84c9b62926468e08b63656c869b, type: 3}
+  - {fileID: 21300000, guid: a514b6c54550cc64ba478675a297edeb, type: 3}
+  - {fileID: 21300000, guid: b98e222f8b3cb35469b532d56ce7edcb, type: 3}
+  - {fileID: 21300000, guid: 0db2d2e9f5b49b4408d939c82f4eced4, type: 3}
+  - {fileID: 21300000, guid: afec4e2ec0500574ea4d73362d88e868, type: 3}
+  - {fileID: 21300000, guid: 55acff370b9f2d343bf00473cde3e525, type: 3}
+  - {fileID: 21300000, guid: a1012efdb8d75a449932f09390a30170, type: 3}
+  - {fileID: 21300000, guid: 63b4aee4b03b7ae4fa0194c836ef44f2, type: 3}
+  - {fileID: 21300000, guid: f5d56675b1225164f935092f8c20e476, type: 3}
+  - {fileID: 21300000, guid: 9f29f852424ae0f4fb74a3c30e3ee7fd, type: 3}
+  - {fileID: 21300000, guid: 205cd43b0a83f6b40adb07fda0333d61, type: 3}
+  - {fileID: 21300000, guid: 96c90832e58b0b447b2ba049eaf1cb62, type: 3}
+  - {fileID: 21300000, guid: 24581a8c023cf9d4d96b966d55fe2c1a, type: 3}
+  - {fileID: 21300000, guid: 5a3f5b41b97ad6c4293a2490a628e5ae, type: 3}
+  - {fileID: 21300000, guid: b4886e3f749db13499cbdbd57c117ec0, type: 3}
+  - {fileID: 21300000, guid: 8589fe09a52ceb14bbe806e33bbddfba, type: 3}
+  - {fileID: 21300000, guid: 1f8340d9511f57543a7c9f3c4a40c47a, type: 3}
+  - {fileID: 21300000, guid: ddcea0e1cd25dcf47b7428e25e1e76eb, type: 3}
+  - {fileID: 21300000, guid: 90c71ea6f86c710418acc5fbcb9918dc, type: 3}

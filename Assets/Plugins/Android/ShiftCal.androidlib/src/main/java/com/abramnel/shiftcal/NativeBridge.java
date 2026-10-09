@@ -160,6 +160,11 @@ public final class NativeBridge {
             items.put(new JSONObject().put("id",id).put("state",entry.optString("state")).put("at",entry.optLong("at",entry.optJSONObject("occurrence")==null?0:entry.getJSONObject("occurrence").optLong("at"))));}
         return new JSONObject().put("items",items).toString();
     }}catch(Exception e){return "{\"items\":[]}";}}
+    // Read-only migration evidence from this installation, scoped to the requested account.
+    public static String savedDefinitions(Activity a,String account){try{synchronized(AlarmStore.LOCK){
+        JSONObject stored=AlarmStore.read(a).getJSONObject("accounts").optJSONObject(account);
+        return stored==null||stored.optJSONObject("save")==null?"":stored.getJSONObject("save").toString();
+    }}catch(Exception e){return "";}}
     public static String queuedDeliveries(Activity a){try{synchronized(AlarmStore.LOCK){
         JSONObject root=AlarmStore.read(a),queue=root.optJSONObject("occurrences");JSONArray items=new JSONArray();
         if(queue!=null){Iterator<String> keys=queue.keys();while(keys.hasNext())items.put(queue.getJSONObject(keys.next()));}
