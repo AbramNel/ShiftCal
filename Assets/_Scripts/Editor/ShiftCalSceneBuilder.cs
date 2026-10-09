@@ -43,6 +43,7 @@ public static partial class ShiftCalSceneBuilder
 
         GameObject systems = new GameObject("Systems");
         systems.AddComponent<AppSession>();
+        systems.AddComponent<PickerCoordinator>();
         systems.AddComponent<FirebaseBootstrap>();
         systems.AddComponent<AuthService>();
         systems.AddComponent<FirestoreService>();

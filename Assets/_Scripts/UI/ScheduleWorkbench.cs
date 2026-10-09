@@ -12,24 +12,35 @@ namespace ShiftCal.UI
 {
     public class ScheduleWorkbench : MonoBehaviour
     {
-        public GameObject agendaPanel, eventPanel, rulePanel;
+        public GameObject agendaPanel, eventPanel;
         public Transform agendaContent;
         public ScheduleListRow rowPrefab;
         public List<InputField> eventFields = new List<InputField>();
-        public List<InputField> ruleFields = new List<InputField>();
-        public Dropdown recurrence, editScope, ruleShift, eventSound, ruleSound;
+        public Dropdown recurrence, editScope, linkedShift, timingMode, repeatEnding, dayContextChoice, eventSound;
+        public PickerField eventDate, eventTime, endingDate;
         public Toggle[] weekdays;
-        public Toggle eventReminder, eventAlarm, eventEnabled, eventVibration, ruleEnabled, ruleAudible, ruleVibration;
+        public Toggle eventAlarm, eventEnabled, eventVibration, defaultSettings;
+        public DurationChoice reminderChoice, beforeShift, snoozeOverride;
+        public GameObject intervalSection, weekdaySection, endingSection, endingDateSection, countSection, shiftSection,
+            beforeSection, timeSection, scopeSection, contextSection, advancedSection, advancedButton, overrideSection, deleteButton;
+        public Text editorHeading, intervalLabel, timingPreview;
+        public Image linkedSwatch;
         public Text messageLabel, readinessLabel, accountLabel, syncLabel, loginStatus, accountDetailsLabel, accountStateLabel;
         public InputField groupName, inviteEmail, invitation;
         public GameObject permissionDetails, upcomingSection, undoButton;
         public Text permissionSummary, upcomingLabel;
         public Button showMore;
         public Transform upcomingContent;
-        private bool upcomingOpen;
+        private bool upcomingOpen, loading, initialized;
         private int upcomingLimit = 4;
         private string sourceFilter, editorSnapshot;
-        private string EditorSignature => string.Join("|", eventFields.Concat(ruleFields).Select(f => f.text)) + string.Join("|", GetComponentsInChildren<Toggle>(true).Select(t => t.isOn.ToString())) + string.Join("|", new[]{recurrence, editScope, ruleShift, eventSound, ruleSound}.Select(d => d.value.ToString()));
+        private EventSeries eventTemplate;
+        private ShiftAlarmRule ruleTemplate;
+        private readonly List<ShiftTypeDefinitionData> shiftChoices = new List<ShiftTypeDefinitionData>();
+        private string EditorSignature => string.Join("|", eventFields.Select(f => f.text)) + "|" + eventDate.value + "|" + eventTime.value + "|" + endingDate.value
+            + string.Join("|", new[]{eventAlarm,eventEnabled,eventVibration,defaultSettings}.Concat(weekdays).Select(t => t.isOn.ToString()))
+            + string.Join("|", new[]{recurrence,editScope,linkedShift,timingMode,repeatEnding,eventSound}.Select(d => d.value.ToString()))
+            + string.Join("|", new[]{reminderChoice,beforeShift,snoozeOverride}.Select(d => d.choice.value + ":" + d.custom.text));
         public bool HasEditorChanges => EditorSignature != editorSnapshot;
         public Dropdown memberChoice;
         private string memberSignature="";
@@ -41,7 +52,7 @@ namespace ShiftCal.UI
         {
             AppSession.Instance.Changed += Refresh;
             ThemeManager.Changed += Refresh;
-            editScope.onValueChanged.AddListener(ScopeChanged);
+            InitializeEditor();
             Hide(); Refresh();
         }
         private void OnDestroy() { if(AppSession.Instance!=null)AppSession.Instance.Changed-=Refresh; ThemeManager.Changed -= Refresh; }
@@ -59,26 +70,59 @@ namespace ShiftCal.UI
             string signature=string.Join("|",FirestoreService.Instance.MemberLabels);
             if(memberChoice!=null&&signature!=memberSignature){memberSignature=signature;memberChoice.ClearOptions();memberChoice.AddOptions(FirestoreService.Instance.MemberLabels.Count==0?new List<string>{"No members loaded"}:FirestoreService.Instance.MemberLabels);}
             if(readinessLabel!=null&&agendaPanel.activeSelf){readinessLabel.text=AndroidBridge.Readiness();permissionSummary.text=AndroidBridge.Call<string>("permissionSummary")??"Alarm readiness - Android device required";}
-            if(AuthService.Instance.HasCachedAccess){string opened=AndroidBridge.Call<string>("opened");if(!string.IsNullOrEmpty(opened)){var hit=JsonUtility.FromJson<Occurrence>(opened);if(hit.id.StartsWith("event:")&&Save.events.Exists(e=>e.id==hit.sourceId))EditEvent(hit.sourceId,hit.dateKey);else if(Save.rules.Exists(r=>r.id==hit.sourceId)){editingRule=hit.sourceId;LoadRule(Save.rules.Find(r=>r.id==hit.sourceId));}else ShowAgenda();}}
+            if(AuthService.Instance.HasCachedAccess){string opened=AndroidBridge.Call<string>("opened");if(!string.IsNullOrEmpty(opened)){var hit=JsonUtility.FromJson<Occurrence>(opened);if(hit.id.StartsWith("event:")&&Save.events.Exists(e=>e.id==hit.sourceId))EditEvent(hit.sourceId,hit.dateKey);else if(Save.rules.Exists(r=>r.id==hit.sourceId)){editingRule=hit.sourceId;LoadRule(Save.rules.Find(r=>r.id==hit.sourceId),hit.dateKey);}else ShowAgenda();}}
         }
-        public void Hide(){agendaPanel.SetActive(false);eventPanel.SetActive(false);rulePanel.SetActive(false);if(messageLabel!=null)messageLabel.text="";}
+        public void Hide(){agendaPanel.SetActive(false);eventPanel.SetActive(false);if(messageLabel!=null)messageLabel.text="";}
         public void ShowAgenda(){ CloseEditors(); if (AppNavigation.Instance != null) AppNavigation.Instance.Open(agendaPanel); else agendaPanel.SetActive(true); agendaPanel.SetActive(true); Refresh(); }
-        private void CloseEditors() { eventPanel.SetActive(false); rulePanel.SetActive(false); Message(""); }
+        private void CloseEditors() { eventPanel.SetActive(false);  Message(""); }
         public void CancelEditor() => AppNavigation.Instance.Back();
         public void TogglePermissions() => permissionDetails.SetActive(!permissionDetails.activeSelf);
         public void ToggleUpcoming() { upcomingOpen = !upcomingOpen; sourceFilter = null; upcomingLimit = 4; Refresh(); }
         private void UpcomingFor(string id) { sourceFilter = id; upcomingOpen = true; upcomingLimit = 4; Refresh(); }
         public void MoreUpcoming() { upcomingLimit += 4; Refresh(); }
-        public void NewEvent()=>NewEvent(DateKeyUtility.ToDateKey(DateTime.Today));
-        public void NewEvent(string date)
+        private void InitializeEditor()
         {
-            editingEvent=null;originalDate=date;
-            LoadEvent(new EventSeries{title="",dateKey=date,startTime="1:00 PM",weekdays=new List<int>{4}});
+            if (initialized) return; initialized = true;
+            recurrence.onValueChanged.AddListener(_ => ConditionalSections());
+            timingMode.onValueChanged.AddListener(_ => ConditionalSections());
+            repeatEnding.onValueChanged.AddListener(_ => ConditionalSections());
+            linkedShift.onValueChanged.AddListener(_ => ConditionalSections());
+            defaultSettings.onValueChanged.AddListener(_ => ConditionalSections());
+            editScope.onValueChanged.AddListener(ScopeChanged);
+            dayContextChoice.onValueChanged.AddListener(value => { if (!loading) { recurrence.value = value == 1 ? 4 : 0; ConditionalSections(); } });
+            eventDate.changed.AddListener(_ => {
+                if (string.IsNullOrEmpty(editingEvent) && ruleTemplate == null)
+                    for (int i = 0; i < 7; i++) weekdays[i].isOn = i == (int)DateKeyUtility.FromDateKey(eventDate.value).DayOfWeek;
+                ConditionalSections();
+            });
+            eventTime.changed.AddListener(_ => ConditionalSections());
+            beforeShift.choice.onValueChanged.AddListener(_ => ConditionalSections());
+            beforeShift.custom.onValueChanged.AddListener(_ => ConditionalSections());
         }
-        private void EditEvent(string id,string date)
+        public void NewEvent()=>NewEvent(DateKeyUtility.ToDateKey(DateTime.Today));
+        public void NewEvent(string date) => NewEvent(date, -1);
+        public void NewEvent(string date, int shiftId)
+        {
+            editingEvent = editingRule = null; originalDate = date; ruleTemplate = null;
+            LoadEvent(new EventSeries { title = "", dateKey = date, startTime = "13:00", zone = "device", alarm = true,
+                useDefaultAlarmSettings = true, weekdays = new List<int> { (int)DateKeyUtility.FromDateKey(date).DayOfWeek } });
+            PopulateShifts(shiftId);
+            var shift = shiftChoices.Find(x => x.id == shiftId);
+            contextSection.SetActive(shift != null);
+            dayContextChoice.ClearOptions(); dayContextChoice.AddOptions(new List<string> { "This date only", "Every " + (shift?.name ?? "matching") + " shift" });
+            dayContextChoice.SetValueWithoutNotify(0); editorSnapshot = EditorSignature;
+        }
+        private void PopulateShifts(int id)
+        {
+            shiftChoices.Clear(); shiftChoices.AddRange(Save.group.shiftTypes.Where(x => !x.retired || x.id == id));
+            linkedShift.ClearOptions(); linkedShift.AddOptions(shiftChoices.Select(x => x.name).ToList());
+            ((ShiftDropdown)linkedShift).shiftColors = shiftChoices.Select(x => ShiftStyleUtility.ToColor(x.colorHex)).ToList();
+            linkedShift.SetValueWithoutNotify(Math.Max(0, shiftChoices.FindIndex(x => x.id == id))); ConditionalSections();
+        }
+        public void EditEvent(string id,string date)
         {
             var e=Save.events.Find(x=>x.id==id);if(e==null)return;
-            editingEvent=id;originalDate=date;
+            editingEvent=id; editingRule=null; ruleTemplate=null; originalDate=date;
             var ex=Save.exceptions.Find(x=>x.seriesId==id&&x.originalDate==date);
             var copy=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(ex?.replacement??e));
             if(ex?.replacement==null)copy.dateKey=date;
@@ -86,24 +130,82 @@ namespace ShiftCal.UI
         }
         private void LoadEvent(EventSeries e)
         {
-            CloseEditors();eventPanel.SetActive(true);eventPanel.transform.SetAsLastSibling();
-            Set(eventFields,"title",e.title);Set(eventFields,"date",e.dateKey);Set(eventFields,"start",e.startTime);Set(eventFields,"end",e.endTime);
-            Set(eventFields,"notes",e.notes);Set(eventFields,"zone",e.zone);Set(eventFields,"interval",e.interval.ToString());Set(eventFields,"until",e.until);Set(eventFields,"count",e.count.ToString());
-            Set(eventFields,"reminder",e.reminderMinutes.ToString());Set(eventFields,"snooze",e.snoozeMinutes.ToString());Set(eventFields,"advance",e.advanceMinutes.ToString());
-            recurrence.value=(int)e.recurrence;editScope.value=0;eventReminder.isOn=e.reminder;eventAlarm.isOn=e.alarm;eventEnabled.isOn=e.enabled;eventVibration.isOn=e.vibration;eventSound.value=SoundIndex(e.sound);
+            InitializeEditor(); loading = true;
+            eventTemplate = JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(e));
+            CloseEditors(); eventPanel.SetActive(true); eventPanel.transform.SetAsLastSibling();
+            editorHeading.text = string.IsNullOrEmpty(editingEvent) ? "New event" : "Edit event";
+            Set(eventFields,"title",e.title); Set(eventFields,"notes",e.notes); Set(eventFields,"interval",e.interval.ToString()); Set(eventFields,"count",Math.Max(1,e.count).ToString());
+            eventDate.Set(e.dateKey); eventTime.Set(e.startTime); endingDate.Set(string.IsNullOrEmpty(e.until) ? e.dateKey : e.until);
+            recurrence.ClearOptions();recurrence.AddOptions(new List<string>{"Once","Daily","Weekly","Monthly"});if(string.IsNullOrEmpty(editingEvent))recurrence.AddOptions(new List<string>{"On shift days"});recurrence.SetValueWithoutNotify((int)e.recurrence); editScope.ClearOptions(); editScope.AddOptions(new List<string>{"This occurrence","This and future occurrences","Entire series"}); editScope.SetValueWithoutNotify(0);
+            timingMode.SetValueWithoutNotify(0);
+            repeatEnding.SetValueWithoutNotify(!string.IsNullOrEmpty(e.until)?1:e.count>0?2:0);
+            eventAlarm.isOn=e.alarm; eventEnabled.isOn=e.enabled; eventVibration.isOn=e.vibration; eventSound.SetValueWithoutNotify(SoundIndex(e.sound)); defaultSettings.isOn=e.useDefaultAlarmSettings;
+            reminderChoice.Set(e.reminder ? e.reminderMinutes == 0 ? -1 : e.reminderMinutes : 0); snoozeOverride.Set(e.snoozeMinutes); beforeShift.Set(90);
             for(int i=0;i<weekdays.Length;i++)weekdays[i].isOn=e.weekdays.Contains(i);
-            Message(""); editorSnapshot = EditorSignature; eventPanel.GetComponent<ModalPanel>().HasChanges = () => HasEditorChanges; eventPanel.GetComponent<ModalPanel>().Close = CloseEditors;
+            contextSection.SetActive(false); advancedSection.SetActive(false); PopulateShifts(-1); loading = false;
+            ConditionalSections(); Message(""); editorSnapshot = EditorSignature;
+            eventPanel.GetComponent<ModalPanel>().HasChanges=()=>HasEditorChanges; eventPanel.GetComponent<ModalPanel>().Close=CloseEditors;
         }
+        public void ConditionalSections()
+        {
+            if (recurrence == null || loading) return;
+            bool linked = recurrence.value == 4, single = ruleTemplate != null && editScope.value == 0;
+            bool repeating = !linked && recurrence.value > 0;
+            intervalSection.SetActive(repeating); weekdaySection.SetActive(!linked && recurrence.value == 2);
+            endingSection.SetActive(repeating); endingDateSection.SetActive(repeating && repeatEnding.value == 1); countSection.SetActive(repeating && repeatEnding.value == 2);
+            shiftSection.SetActive(linked && !single); beforeSection.SetActive(linked && !single && timingMode.value == 0);
+            timeSection.SetActive(!linked || single || timingMode.value == 1);
+            scopeSection.SetActive(ruleTemplate != null || !string.IsNullOrEmpty(editingEvent) && Save.events.Find(x=>x.id==editingEvent)?.recurrence != RecurrenceKind.Once);
+            recurrence.interactable = ruleTemplate == null;
+            reminderChoice.gameObject.SetActive(!linked); timingPreview.gameObject.SetActive(linked);
+            foreach(var f in eventFields.Where(x=>x.name=="title"||x.name=="notes"))f.interactable=!single;
+            eventAlarm.interactable=!single;
+            advancedButton.SetActive(!single); if(single)advancedSection.SetActive(false);
+            // Existing EventSeries remain EventSeries; changing engine requires a deliberate new definition.
+            if (!string.IsNullOrEmpty(editingEvent) && recurrence.value == 4) { recurrence.SetValueWithoutNotify((int)eventTemplate.recurrence); linked = false; }
+            deleteButton.SetActive(!string.IsNullOrEmpty(editingEvent) || ruleTemplate != null);
+            deleteButton.GetComponentInChildren<Text>().text = ruleTemplate != null ? single ? "Skip this occurrence" : "Delete rule" : "Delete event";
+            overrideSection.SetActive(!defaultSettings.isOn);
+            intervalLabel.text = "Every N " + (recurrence.value == 1 ? "days" : recurrence.value == 2 ? "weeks" : "months");
+            if (shiftChoices.Count > 0) linkedSwatch.color = ShiftStyleUtility.ToColor(shiftChoices[Mathf.Clamp(linkedShift.value,0,shiftChoices.Count-1)].colorHex);
+            timingPreview.text = single ? "Changes delivery for the " + originalDate + " shift only." : "";
+            if (linked && !single && shiftChoices.Count > 0)
+            {
+                var shift = shiftChoices[linkedShift.value];
+                timingPreview.text = "Follows the resolved " + shift.name + " shift, including date changes.";
+                if (timingMode.value == 0 && ShiftTimeUtility.TryParseTime(shift.startTime,out _))
+                    try { var at = RecurrenceEngine.Instant(DateKeyUtility.FromDateKey(eventDate.value),shift.startTime,"device") - beforeShift.Minutes * 60000L;
+                        timingPreview.text += "\nFor this shift date: " + DateTimeOffset.FromUnixTimeMilliseconds(at).ToLocalTime().ToString("MMM d, h:mm tt"); } catch (Exception) { }
+            }
+        }
+        public void ToggleAdvanced() => advancedSection.SetActive(!advancedSection.activeSelf);
         public void SaveEvent()
         {
             try
             {
-                var e=new EventSeries{title=Get(eventFields,"title"),dateKey=Get(eventFields,"date"),startTime=Get(eventFields,"start"),endTime=Get(eventFields,"end"),notes=Get(eventFields,"notes"),zone=Get(eventFields,"zone"),recurrence=(RecurrenceKind)recurrence.value,
-                    interval=Number(eventFields,"interval"),until=Get(eventFields,"until"),count=Number(eventFields,"count"),reminder=eventReminder.isOn,alarm=eventAlarm.isOn,enabled=eventEnabled.isOn,vibration=eventVibration.isOn,sound=Sound(eventSound.value),
-                    reminderMinutes=Number(eventFields,"reminder"),snoozeMinutes=Number(eventFields,"snooze"),advanceMinutes=Number(eventFields,"advance")};
-                for(int i=0;i<weekdays.Length;i++)if(weekdays[i].isOn)e.weekdays.Add(i);
+                if (recurrence.value == 4) { SaveLinked(); return; }
+                var e=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(eventTemplate)); e.id=Guid.NewGuid().ToString("N");
+                e.title=Get(eventFields,"title"); e.dateKey=eventDate.value; e.startTime=eventTime.value; e.notes=Get(eventFields,"notes");
+                e.recurrence=(RecurrenceKind)recurrence.value; e.interval=e.recurrence==RecurrenceKind.Once?Math.Max(1,e.interval):Number(eventFields,"interval");
+                // Hidden legacy recurrence limits stay untouched on once-only records.
+                if(e.recurrence!=RecurrenceKind.Once){e.until=repeatEnding.value==1?endingDate.value:"";e.count=repeatEnding.value==2?Number(eventFields,"count"):0;}
+                if(e.recurrence!=RecurrenceKind.Once&&repeatEnding.value==2&&e.count<1)throw new ArgumentException("Use at least 1 occurrence.");
+                int reminder=reminderChoice.Minutes; e.reminder=reminder!=0; if(e.reminder)e.reminderMinutes=Math.Max(0,reminder);
+                e.alarm=eventAlarm.isOn; e.enabled=eventEnabled.isOn; e.useDefaultAlarmSettings=defaultSettings.isOn;
+                if(!defaultSettings.isOn){e.vibration=eventVibration.isOn;e.sound=eventSound.value==SoundIndex(eventTemplate.sound)?eventTemplate.sound:Sound(eventSound.value);e.snoozeMinutes=snoozeOverride.Minutes;}
+                e.weekdays.Clear();for(int i=0;i<7;i++)if(weekdays[i].isOn)e.weekdays.Add(i);
                 if(!RecurrenceEngine.Validate(e,out string error)){Message(error);return;}
                 var old=Save.events.Find(x=>x.id==editingEvent);
+                if(old!=null&&editScope.value>0)
+                {
+                    // These fields are hidden in the compact editor. An occurrence
+                    // replacement may have different legacy metadata from its series.
+                    e.zone=old.zone;e.endTime=old.endTime;e.advanceMinutes=old.advanceMinutes;
+                    if(e.sound==eventTemplate.sound)e.sound=old.sound;
+                    if(e.vibration==eventTemplate.vibration)e.vibration=old.vibration;
+                    if(e.snoozeMinutes==eventTemplate.snoozeMinutes)e.snoozeMinutes=old.snoozeMinutes;
+                    if(!RecurrenceEngine.Validate(e,out error)){Message(error);return;}
+                }
                 if(old==null)Save.events.Add(e);
                 else if(editScope.value==0 && old.recurrence!=RecurrenceKind.Once)
                 {
@@ -132,9 +234,32 @@ namespace ShiftCal.UI
         }
         private void ScopeChanged(int scope)
         {
-            var e=Save.events.Find(x=>x.id==editingEvent);if(e!=null)Set(eventFields,"date",scope==2?e.dateKey:Save.exceptions.Find(x=>x.seriesId==e.id&&x.originalDate==originalDate)?.replacement?.dateKey??originalDate);
+            if (loading) return;
+            if (ruleTemplate != null) { LoadRule(ruleTemplate, originalDate, scope); return; }
+            var e=Save.events.Find(x=>x.id==editingEvent);
+            if(e!=null)
+            {
+                string date=scope==2?e.dateKey:Save.exceptions.Find(x=>x.seriesId==e.id&&x.originalDate==originalDate)?.replacement?.dateKey??originalDate;
+                eventDate.Set(date);
+                // An exception's replacement is once-only. Moving its edit scope
+                // back to the series must restore that series' recurrence contract.
+                if(scope>0&&eventTemplate.recurrence==RecurrenceKind.Once&&e.recurrence!=RecurrenceKind.Once)
+                {
+                    recurrence.SetValueWithoutNotify((int)e.recurrence);Set(eventFields,"interval",e.interval.ToString());
+                    repeatEnding.SetValueWithoutNotify(!string.IsNullOrEmpty(e.until)?1:e.count>0?2:0);
+                    endingDate.Set(string.IsNullOrEmpty(e.until)?e.dateKey:e.until);Set(eventFields,"count",Math.Max(1,e.count).ToString());
+                    for(int i=0;i<7;i++)weekdays[i].isOn=e.weekdays.Contains(i);
+                }
+                ConditionalSections();
+            }
         }
-        public void DeleteEvent() => AppNavigation.Instance.Confirm("Delete the selected event scope?", DeleteEventConfirmed);
+        public void DeleteEvent() => AppNavigation.Instance.Confirm("Delete the selected event scope?", () => {
+            if (ruleTemplate != null) {
+                if (editScope.value == 0) AndroidBridge.Action("skip", "shift:" + ruleTemplate.id + ":" + originalDate);
+                else { Save.rules.RemoveAll(x=>x.id==ruleTemplate.id); Save.mutedRules.Remove(ruleTemplate.id); AppSession.Instance.SaveLocal(); }
+                ShowAgenda();
+            } else DeleteEventConfirmed();
+        });
         private void DeleteEventConfirmed()
         {
             var e=Save.events.Find(x=>x.id==editingEvent);if(e==null){ShowAgenda();return;}
@@ -143,26 +268,57 @@ namespace ShiftCal.UI
             else{Save.events.Remove(e);Save.exceptions.RemoveAll(x=>x.seriesId==e.id);}
             AppSession.Instance.SaveLocal();ShowAgenda();
         }
-        public void NewRule(){editingRule=null;LoadRule(new ShiftAlarmRule{shiftType=(int)ShiftTypeId.Day12});}
-        private void LoadRule(ShiftAlarmRule r)
+        public void NewRule()
         {
-            CloseEditors();rulePanel.SetActive(true);rulePanel.transform.SetAsLastSibling();ruleShift.ClearOptions();ruleShift.AddOptions(Save.group.shiftTypes.Select(x=>x.name).ToList());
-            ruleShift.value=Math.Max(0,Save.group.shiftTypes.FindIndex(x=>x.id==r.shiftType));
-            Set(ruleFields,"label",r.label);Set(ruleFields,"offset",r.beforeMinutes.ToString());Set(ruleFields,"snooze",r.snoozeMinutes.ToString());Set(ruleFields,"advance",r.advanceMinutes.ToString());
-            ruleEnabled.isOn=r.enabled&&!Save.mutedRules.Contains(r.id);ruleAudible.isOn=r.audible;ruleVibration.isOn=r.vibration;ruleSound.value=SoundIndex(r.sound);Message(""); editorSnapshot = EditorSignature; rulePanel.GetComponent<ModalPanel>().HasChanges = () => HasEditorChanges; rulePanel.GetComponent<ModalPanel>().Close = CloseEditors;
+            NewEvent(); recurrence.value = 4; Set(eventFields,"title","Wake Up");
+            PopulateShifts((int)ShiftTypeId.Day12); timingMode.value = 0; ConditionalSections(); editorSnapshot = EditorSignature;
         }
-        public void SaveRule()
+        public void LoadRule(ShiftAlarmRule r, string date = null, int scope = -1)
         {
-            try{
-                var shift=Save.group.shiftTypes[ruleShift.value];if(!ShiftTimeUtility.TryParseTime(shift.startTime,out _)){Message("Set a start time for "+shift.name+" in Shift Settings first.");return;}
-                var r=new ShiftAlarmRule{id=editingRule??Guid.NewGuid().ToString("N"),groupId=Save.group.groupId,shiftType=shift.id,label=Get(ruleFields,"label"),beforeMinutes=Number(ruleFields,"offset"),snoozeMinutes=Number(ruleFields,"snooze"),advanceMinutes=Number(ruleFields,"advance"),enabled=ruleEnabled.isOn,audible=ruleAudible.isOn,vibration=ruleVibration.isOn,sound=Sound(ruleSound.value)};
-                if(string.IsNullOrWhiteSpace(r.label)||r.beforeMinutes<0||r.beforeMinutes>1440||r.advanceMinutes<0||r.advanceMinutes>10080||r.snoozeMinutes<1||r.snoozeMinutes>120){Message("Enter a label; offset 0-1440, advance 0-10080, snooze 1-120 minutes.");return;}
-                if(!ruleEnabled.isOn&&!Save.mutedRules.Contains(r.id))Save.mutedRules.Add(r.id);else if(ruleEnabled.isOn)Save.mutedRules.Remove(r.id);r.enabled=true;
-                Save.rules.RemoveAll(x=>x.id==r.id);Save.rules.Add(r);AppSession.Instance.SaveLocal();ShowAgenda();
-            }catch(Exception ex){Message(ex.Message);}
+            if (r == null) return;
+            editingRule = r.id; editingEvent = null;
+            originalDate = date ?? DateKeyUtility.ToDateKey(DateTime.Today);
+            ruleTemplate = null;
+            // Load ordinary controls once, then switch to the rule's authoritative identity.
+            LoadEvent(new EventSeries { title=r.label,notes=r.notes,dateKey=date??DateKeyUtility.ToDateKey(DateTime.Today),startTime=string.IsNullOrEmpty(r.fixedTime)?"04:00":r.fixedTime,
+                alarm=!r.calendarOnly&&r.audible,enabled=r.enabled&&!Save.mutedRules.Contains(r.id),vibration=r.vibration,sound=r.sound,snoozeMinutes=r.snoozeMinutes,useDefaultAlarmSettings=r.useDefaultAlarmSettings });
+            ruleTemplate=JsonUtility.FromJson<ShiftAlarmRule>(JsonUtility.ToJson(r)); loading=true;
+            editorHeading.text="Edit shift event"; recurrence.SetValueWithoutNotify(4);
+            editScope.ClearOptions();editScope.AddOptions(new List<string>{"This occurrence","Entire rule"});editScope.SetValueWithoutNotify(scope>=0?scope:date==null?1:0);
+            timingMode.SetValueWithoutNotify((int)r.timingMode); beforeShift.Set(r.beforeMinutes); reminderChoice.Set(0);
+            PopulateShifts(r.shiftType); loading=false;
+            if(editScope.value==0)
+            {
+                var hit=RecurrenceEngine.ShiftDates(Save,DateKeyUtility.FromDateKey(originalDate),DateKeyUtility.FromDateKey(originalDate),true).Find(x=>x.sourceId==r.id);
+                if(hit!=null){var actual=DateTimeOffset.FromUnixTimeMilliseconds(hit.at).ToLocalTime();eventDate.Set(DateKeyUtility.ToDateKey(actual.Date));eventTime.Set(actual.ToString("HH:mm"));}
+                timingPreview.text="Changes delivery for the " + originalDate + " shift only.";
+            }
+            ConditionalSections(); Message("");editorSnapshot=EditorSignature;
         }
-        public void DeleteRule() => AppNavigation.Instance.Confirm("Delete this alarm rule?", DeleteRuleConfirmed);
-        private void DeleteRuleConfirmed(){Save.rules.RemoveAll(x=>x.id==editingRule);AppSession.Instance.SaveLocal();ShowAgenda();}
+        private void SaveLinked()
+        {
+            if(ruleTemplate!=null&&editScope.value==0)
+            {
+                long at=RecurrenceEngine.Instant(DateKeyUtility.FromDateKey(eventDate.value),eventTime.value,"device");
+                if(at<=DateKeyUtility.UnixMsNow())throw new ArgumentException("Choose a future delivery time.");
+                ShiftDeliveryExceptions.Change("shift:"+ruleTemplate.id+":"+originalDate,at);ShowAgenda();return;
+            }
+            if(shiftChoices.Count==0)throw new ArgumentException("Add a shift type first.");
+            var shift=shiftChoices[linkedShift.value];
+            if(timingMode.value==0&&!ShiftTimeUtility.TryParseTime(shift.startTime,out _))throw new ArgumentException("Set a start time for "+shift.name+" in Manage Shifts first, or choose Specific time.");
+            var r=ruleTemplate==null?new ShiftAlarmRule{groupId=Save.group.groupId,fromDate=eventDate.value,useDefaultAlarmSettings=true}
+                :JsonUtility.FromJson<ShiftAlarmRule>(JsonUtility.ToJson(ruleTemplate));
+            r.label=Get(eventFields,"title");if(string.IsNullOrWhiteSpace(r.label))throw new ArgumentException("Enter an event title.");
+            r.notes=Get(eventFields,"notes");r.shiftType=shift.id;r.timingMode=(ShiftTimingMode)timingMode.value;r.beforeMinutes=beforeShift.Minutes;r.fixedTime=eventTime.value;
+            if(r.timingMode==ShiftTimingMode.FixedTime&&!ShiftTimeUtility.TryParseTime(r.fixedTime,out _))throw new ArgumentException("Choose a time.");
+            r.audible=eventAlarm.isOn;
+            // Existing silent notifications remain silent notifications unless Alarm is deliberately changed.
+            if(ruleTemplate==null||eventAlarm.isOn!=(!ruleTemplate.calendarOnly&&ruleTemplate.audible))r.calendarOnly=!eventAlarm.isOn;
+            r.useDefaultAlarmSettings=defaultSettings.isOn;
+            if(!defaultSettings.isOn){r.vibration=eventVibration.isOn;r.sound=ruleTemplate!=null&&eventSound.value==SoundIndex(ruleTemplate.sound)?ruleTemplate.sound:Sound(eventSound.value);r.snoozeMinutes=snoozeOverride.Minutes;}
+            r.enabled=true;if(!eventEnabled.isOn&&!Save.mutedRules.Contains(r.id))Save.mutedRules.Add(r.id);else if(eventEnabled.isOn)Save.mutedRules.Remove(r.id);
+            Save.rules.RemoveAll(x=>x.id==r.id);Save.rules.Add(r);AppSession.Instance.SaveLocal();ShowAgenda();
+        }
         public void Refresh()
         {
             if(AppSession.Instance==null||Save==null)return;
@@ -177,6 +333,9 @@ namespace ShiftCal.UI
             {
                 long now=DateKeyUtility.UnixMsNow();
                 var occurrences=RecurrenceEngine.Resolve(Save,DateTime.Today.AddDays(-1),DateTime.Today.AddYears(2));
+                var states=AndroidBridge.DeliveryStates();
+                foreach(var o in occurrences)
+                    if(states.TryGetValue(o.id,out var state)&&state.state=="snoozed"){o.at=state.at;o.state=state.state;}
                 foreach(var e in Save.events.ToArray())
                 {
                     var next=RecurrenceEngine.EventDates(Save,e,DateTime.Today.AddDays(-1),DateTime.Today.AddYears(2)).FirstOrDefault(x=>x.at>now);
@@ -187,23 +346,24 @@ namespace ShiftCal.UI
                 }
                 foreach(var r in Save.rules.Where(r=>string.IsNullOrEmpty(r.groupId)||r.groupId==Save.group.groupId).ToArray())
                 {
-                    var next=occurrences.FirstOrDefault(o=>!o.isEvent&&o.sourceId==r.id&&o.at>now);
+                    var next=occurrences.Where(o=>!o.isEvent&&o.sourceId==r.id&&o.at>now&&
+                        (!states.TryGetValue(o.id,out var state)||state.state=="snoozed")).OrderBy(o=>o.at).FirstOrDefault();
                     bool active=r.enabled&&!Save.mutedRules.Contains(r.id);
                     string shift=Save.group.shiftTypes.Find(x=>x.id==r.shiftType)?.name??"Missing shift";
-                    Row(r.label,shift+" • "+r.beforeMinutes+" min before start\n"+(next==null?"No upcoming delivery":"Next: "+DayInformation.Time(next))+" • "+(active?"Active":"Paused"),"Edit",()=>{editingRule=r.id;LoadRule(r);},active?"Pause":"Resume",()=>{r.enabled=true;if(active)Save.mutedRules.Add(r.id);else Save.mutedRules.Remove(r.id);AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(r.id));
+                    Row(r.label,shift+" shifts • "+(r.timingMode==ShiftTimingMode.FixedTime?r.fixedTime:r.beforeMinutes+" min before start")+"\n"+(next==null?"No upcoming delivery":"Next: "+DayInformation.Time(next))+" • "+(active?"Active":"Paused"),"Edit",()=>{editingRule=r.id;LoadRule(r);},active?"Pause":"Resume",()=>{r.enabled=true;if(active)Save.mutedRules.Add(r.id);else Save.mutedRules.Remove(r.id);AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(r.id));
                 }
                 if(!upcomingOpen)return;
-                var states=AndroidBridge.DeliveryStates();
                 string deliveries=AndroidBridge.Call<string>("specialDeliveries");
                 var special=string.IsNullOrEmpty(deliveries)?new List<Occurrence>():JsonUtility.FromJson<OccurrenceList>(deliveries).items;
                 string queuedJson=AndroidBridge.Call<string>("queuedDeliveries");
                 var queued=string.IsNullOrEmpty(queuedJson)?occurrences.Where(o=>o.at>now&&o.at<now+45L*86400000).ToList():JsonUtility.FromJson<OccurrenceList>(queuedJson).items;
+                if(!string.IsNullOrEmpty(queuedJson))queued.AddRange(occurrences.Where(o=>o.state=="view"&&o.at>now&&o.at<now+45L*86400000));
                 var upcoming=special.Concat(queued.Where(o=>o.at>now&&!states.ContainsKey(o.id)&&!special.Exists(x=>x.id==o.id))).Where(o=>sourceFilter==null||o.sourceId==sourceFilter).OrderBy(o=>o.at).ToList();
                 showMore.gameObject.SetActive(upcoming.Count>upcomingLimit);
                 foreach(var o in upcoming.Take(upcomingLimit))
                 {
-                    bool skipped=o.state=="skipped",ringing=o.state=="ringing",view=o.id.EndsWith(":view")||string.IsNullOrEmpty(queuedJson)&&!skipped&&!ringing;
-                    Action edit=()=>{if(o.isEvent)EditEvent(o.sourceId,o.dateKey);else{var rule=Save.rules.Find(x=>x.id==o.sourceId);if(rule!=null){editingRule=rule.id;LoadRule(rule);}}};
+                    bool skipped=o.state=="skipped",ringing=o.state=="ringing",view=o.id.EndsWith(":view")||o.state=="view"||string.IsNullOrEmpty(queuedJson)&&!skipped&&!ringing;
+                    Action edit=()=>{if(o.isEvent)EditEvent(o.sourceId,o.dateKey);else{var rule=Save.rules.Find(x=>x.id==o.sourceId);if(rule!=null){editingRule=rule.id;LoadRule(rule,o.dateKey);}}};
                     RowTo(upcomingContent,o.title,DayInformation.Time(o)+(string.IsNullOrEmpty(o.state)?" • Device time":" • "+o.state),view?"Edit":skipped?"Undo skip":ringing?"Dismiss":"Skip",()=>{if(view){edit();return;}AndroidBridge.Action(skipped?"undo":ringing?"dismiss":"skip",o.id);undoId=skipped?null:o.id;Refresh();},ringing?"Snooze":view?"":"Edit",ringing?(Action)(()=>{AndroidBridge.Action("snooze",o.id);Refresh();}):view?null:edit,"",null);
                 }
             }catch(Exception ex){Message(ex.Message);}
@@ -252,12 +412,12 @@ namespace ShiftCal.UI
         {
             if (messageLabel == null) return;
             messageLabel.text = text; messageLabel.transform.SetAsLastSibling();
-            foreach (var panel in new[]{eventPanel,rulePanel})
+            foreach (var panel in new[]{eventPanel})
             {
                 var scroll=panel.GetComponentInChildren<ScrollRect>(true);
                 if (scroll != null) scroll.GetComponent<RectTransform>().offsetMin = new Vector2(20,string.IsNullOrEmpty(text)?180:360);
             }
-            bool editor=eventPanel.activeSelf||rulePanel.activeSelf;
+            bool editor=eventPanel.activeSelf;
             messageLabel.rectTransform.offsetMin=new Vector2(28,editor?168:24);
             messageLabel.rectTransform.offsetMax=new Vector2(-28,editor?342:180);
         }

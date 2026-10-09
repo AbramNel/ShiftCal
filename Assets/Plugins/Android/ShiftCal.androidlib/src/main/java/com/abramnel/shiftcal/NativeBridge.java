@@ -19,6 +19,66 @@ import java.util.*;
 import java.util.concurrent.Executor;
 
 public final class NativeBridge {
+    private static final Object PICKER_LOCK=new Object();
+    private static Dialog picker;
+    private static String pickerToken="";
+    public static String pickDate(Activity a,String token,String value){
+        java.time.LocalDate date;
+        try{date=value.isEmpty()?java.time.LocalDate.now():java.time.LocalDate.parse(value);}catch(Exception e){return "Invalid date";}
+        final java.time.LocalDate initial=date;
+        synchronized(PICKER_LOCK){if(!pickerToken.isEmpty())return "A picker is already open.";pickerToken=token;}
+        a.runOnUiThread(()->{
+            boolean[] accepted={false};
+            DatePickerDialog dialog=new DatePickerDialog(a,(view,year,month,day)->{
+                accepted[0]=true;pickerResult(token,true,java.time.LocalDate.of(year,month+1,day).toString());
+            },initial.getYear(),initial.getMonthValue()-1,initial.getDayOfMonth());
+            Calendar min=Calendar.getInstance(),max=Calendar.getInstance();min.set(2000,0,1,0,0,0);max.set(2100,11,31,23,59,59);
+            dialog.getDatePicker().setMinDate(min.getTimeInMillis());dialog.getDatePicker().setMaxDate(max.getTimeInMillis());
+            showPicker(a,dialog,token,accepted);
+        });return "";
+    }
+    public static String pickTime(Activity a,String token,String value){
+        java.time.LocalTime time;
+        try{time=value.isEmpty()?java.time.LocalTime.of(13,0):OccurrenceEngine.time(value);}catch(Exception e){return "Invalid time";}
+        final java.time.LocalTime initial=time;
+        synchronized(PICKER_LOCK){if(!pickerToken.isEmpty())return "A picker is already open.";pickerToken=token;}
+        a.runOnUiThread(()->{
+            boolean[] accepted={false};
+            TimePickerDialog dialog=new TimePickerDialog(a,(view,hour,minute)->{
+                accepted[0]=true;pickerResult(token,true,String.format(Locale.US,"%02d:%02d",hour,minute));
+            },initial.getHour(),initial.getMinute(),android.text.format.DateFormat.is24HourFormat(a));
+            showPicker(a,dialog,token,accepted);
+        });return "";
+    }
+    private static void showPicker(Activity a,Dialog dialog,String token,boolean[] accepted){
+        synchronized(PICKER_LOCK){
+            if(!pickerToken.equals(token)||a.isFinishing()||a.isDestroyed()){pickerToken="";pickerResult(token,false,"");return;}
+            picker=dialog;
+        }
+        dialog.setOnDismissListener(d->{synchronized(PICKER_LOCK){picker=null;pickerToken="";}if(!accepted[0])pickerResult(token,false,"");});
+        dialog.show();
+    }
+    private static void pickerResult(String token,boolean accepted,String value){try{message("OnPickerResult",new JSONObject().put("token",token).put("accepted",accepted).put("value",value).toString());}catch(Exception ignored){}}
+    public static String cancelPicker(Activity a,String token){a.runOnUiThread(()->{synchronized(PICKER_LOCK){if(pickerToken.equals(token)){if(picker!=null)picker.dismiss();else pickerToken="";}}});return "";}
+    public static String preferences(Activity a,String json){try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);root.put("preferences",new JSONObject(json));AlarmStore.write(a,root);AlarmScheduler.reconcile(a,root);}return "";}catch(Exception e){error(a,e);return e.getMessage();}}
+    public static String alarmTheme(Activity a,int theme){try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);root.put("theme",Math.max(0,Math.min(2,theme)));AlarmStore.write(a,root);}return "";}catch(Exception e){return e.getMessage();}}
+    public static int keyboardHeight(Activity a){
+        android.view.View root=a.getWindow().getDecorView();
+        if(Build.VERSION.SDK_INT>=30){android.view.WindowInsets insets=root.getRootWindowInsets();if(insets!=null)return insets.isVisible(android.view.WindowInsets.Type.ime())
+            ?Math.max(0,insets.getInsets(android.view.WindowInsets.Type.ime()).bottom-insets.getInsets(android.view.WindowInsets.Type.systemBars()).bottom):0;}
+        android.graphics.Rect visible=new android.graphics.Rect();root.getWindowVisibleDisplayFrame(visible);
+        int obscured=root.getRootView().getHeight()-visible.bottom;
+        return obscured>root.getRootView().getHeight()*.15f?obscured:0;
+    }
+    public static String shiftDeliveryChanges(Activity a){try{synchronized(AlarmStore.LOCK){JSONObject changes=AlarmStore.account(AlarmStore.read(a)).optJSONObject("shiftChanges");JSONArray items=new JSONArray();if(changes!=null){Iterator<String> keys=changes.keys();while(keys.hasNext()){String id=keys.next();items.put(new JSONObject().put("id",id).put("at",changes.getLong(id)));}}return new JSONObject().put("items",items).toString();}}catch(Exception e){return "{\"items\":[]}";}}
+    public static String changeShiftDelivery(Activity a,String id,long at){try{synchronized(AlarmStore.LOCK){
+        if(!id.startsWith("shift:")||at<=System.currentTimeMillis())throw new IllegalArgumentException("Choose a future shift delivery.");
+        JSONObject root=AlarmStore.read(a),account=AlarmStore.account(root),changes=account.optJSONObject("shiftChanges");if(changes==null){changes=new JSONObject();account.put("shiftChanges",changes);}
+        JSONObject entry=account.getJSONObject("ledger").optJSONObject(id);
+        if(entry!=null&&!entry.optString("state").equals("skipped"))throw new IllegalArgumentException("This occurrence has already been delivered or dismissed.");
+        // A deliberate edit may undo a skip; schedule reconciliation alone never does.
+        account.getJSONObject("ledger").remove(id);changes.put(id,at);AlarmStore.write(a,root);AlarmScheduler.reconcile(a,root);
+    }return "";}catch(Exception e){return e.getMessage();}}
     static Executor mainExecutor(){return command->new Handler(Looper.getMainLooper()).post(command);}
     public static String backup(Activity a,String json){try{java.io.File folder=new java.io.File(a.getCacheDir(),"shiftcal-backups");folder.mkdirs();java.io.File file=new java.io.File(folder,"ShiftCal-backup.json");try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));out.getFD().sync();}
         Uri uri=androidx.core.content.FileProvider.getUriForFile(a,a.getPackageName()+".shiftcal.files",file);Intent share=new Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(ClipData.newRawUri("ShiftCal backup",uri));a.startActivity(Intent.createChooser(share,"Export calendar backup"));return "";
@@ -61,7 +121,8 @@ public final class NativeBridge {
                     boolean muted=false;JSONArray mutedRules=OccurrenceEngine.array(save,"mutedRules");for(int j=0;j<mutedRules.length();j++)if(mutedRules.optString(j).equals(rule.optString("id")))muted=true;if(muted)continue;
                     boolean usable=false;
                     for(int j=0;j<shifts.length();j++){JSONObject shift=shifts.getJSONObject(j);if(shift.optInt("id")==rule.optInt("shiftType")){try{OccurrenceEngine.time(shift.optString("startTime"));usable=true;}catch(Exception ignored){}}}
-                    if(!usable)blocked="Add a valid start time for "+rule.optString("label");}}
+                    if(rule.optInt("timingMode")==1){try{OccurrenceEngine.time(rule.optString("fixedTime"));usable=true;}catch(Exception ignored){}}
+                    if(!usable&&!rule.optBoolean("calendarOnly"))blocked="Add a valid start time for "+rule.optString("label");}}
             JSONObject next=r.optJSONObject("next");String text="Notifications: "+(AlarmScheduler.notifications(a)?"allowed":"blocked")+"\nExact alarms: "+(AlarmScheduler.exact(a)?"allowed":"blocked");
             text+="\n"+(blocked.isEmpty()?"Alarm capability ready":blocked);
             text+="\n"+(blocked.isEmpty()&&next!=null?"Next scheduled: "+next.optString("title")+" / "+DateFormat.getDateTimeInstance().format(new Date(next.optLong("at"))):"No confirmed scheduled alarm");
@@ -147,7 +208,7 @@ public final class NativeBridge {
     static void upcoming(Context c,JSONObject o){if(AlarmScheduler.notifications(c))nm(c).notify(o.optString("id"),1,notification(c,o,false,true));}
     static void remove(Context c,String id){nm(c).cancel(id,1);}
     static void removeAllNotifications(Context c){nm(c).cancelAll();}
-    static void stop(Context c,String id){if(RingingService.running)c.startService(new Intent(c,RingingService.class).setAction("stop").putExtra("id",id));}
-    static List<StatusBarNotificationWrapper> active(Context c){List<StatusBarNotificationWrapper> result=new ArrayList<>();for(StatusBarNotification n:nm(c).getActiveNotifications())if(n.getTag()!=null)result.add(new StatusBarNotificationWrapper(n.getTag(),(n.getNotification().flags&Notification.FLAG_ONGOING_EVENT)!=0));return result;}
+    static void stop(Context c,String id){RingingService service=RingingService.instance;if(service!=null)service.stopOccurrence(id);else nm(c).cancel(42);}
+    static List<StatusBarNotificationWrapper> active(Context c){List<StatusBarNotificationWrapper> result=new ArrayList<>();for(StatusBarNotification n:nm(c).getActiveNotifications())if(n.getTag()!=null)result.add(new StatusBarNotificationWrapper(n.getTag(),(n.getNotification().flags&Notification.FLAG_ONGOING_EVENT)!=0,"shiftcal_upcoming".equals(n.getNotification().getChannelId())));return result;}
 }
-final class StatusBarNotificationWrapper {final String id;final boolean ringing;StatusBarNotificationWrapper(String id,boolean ringing){this.id=id;this.ringing=ringing;}}
+final class StatusBarNotificationWrapper {final String id;final boolean ringing,upcoming;StatusBarNotificationWrapper(String id,boolean ringing,boolean upcoming){this.id=id;this.ringing=ringing;this.upcoming=upcoming;}}

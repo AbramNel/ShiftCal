@@ -24,8 +24,12 @@ const fs = require('node:fs');
     await assertFails(deleteDoc(doc(invited,base+'/records/event~meeting')));
     await assertFails(setDoc(doc(stranger,'shiftcal/v1/users/owner/records/rule~wake'),record('rule/wake','stranger')));
     await assertSucceeds(setDoc(doc(owner,'shiftcal/v1/users/owner/records/rule~wake'),record('rule/wake','owner')));
+    const linkedRule={id:'wake',groupId:'test',shiftType:2,label:'Wake Up',timingMode:1,fixedTime:'04:00',notes:'Bring medication',calendarOnly:false,useDefaultAlarmSettings:true};
+    await assertSucceeds(updateDoc(doc(owner,'shiftcal/v1/users/owner/records/rule~wake'),{revision:2,json:JSON.stringify(linkedRule)}));
+    const roundTrip=await assertSucceeds(getDoc(doc(owner,'shiftcal/v1/users/owner/records/rule~wake')));
+    if(JSON.parse(roundTrip.data().json).fixedTime!=='04:00')throw new Error('Linked rule JSON did not round-trip');
     await assertFails(getDoc(doc(invited,'shiftcal/v1/users/owner/records/rule~wake')));
     await assertFails(updateDoc(doc(owner,base+'/records/shift~2'),{key:'event/change',revision:2}));
-    console.log('PASS: 17 Firestore membership, ownership, private rules, revisions and tombstone checks');
+    console.log('PASS: 19 Firestore membership, ownership, private linked-rule round-trip, revisions and tombstone checks');
   } finally { await env.cleanup(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

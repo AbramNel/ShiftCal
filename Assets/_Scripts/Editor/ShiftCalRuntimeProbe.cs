@@ -24,6 +24,27 @@ public class ShiftCalRuntimeProbe
         var nav=AppNavigation.Instance;var cal=UnityEngine.Object.FindFirstObjectByType<CalendarController>(FindObjectsInactive.Include);
         var work=UnityEngine.Object.FindFirstObjectByType<ScheduleWorkbench>();var settings=UnityEngine.Object.FindFirstObjectByType<ShiftSettingsController>(FindObjectsInactive.Include);
         nav.ShowCalendar();yield return null;nav.ShowSettings();yield return null;
+        var preferences=nav.GetComponentInChildren<AlarmPreferencesPanel>(true);
+        preferences.Load();preferences.upcoming.isOn=true;preferences.upcoming.isOn=false;yield return null;
+        Check(!DeviceAlarmPreferences.Current.upcomingNotices&&!preferences.noticeSection.activeSelf,"upcoming toggle immediately persists on this device");
+        preferences.upcoming.isOn=true;preferences.notice.choice.value=2;preferences.snooze.choice.value=1;yield return null;
+        Check(DeviceAlarmPreferences.Current.upcomingNotices&&DeviceAlarmPreferences.Current.noticeMinutes==15&&DeviceAlarmPreferences.Current.snoozeMinutes==10,"global notice and snooze preset controls persist");
+        work.NewEvent("2026-10-08");yield return null;
+        var datePicker=UnityEngine.Object.FindFirstObjectByType<UnityPickerDialog>(FindObjectsInactive.Include);
+        work.eventDate.GetComponent<Button>().onClick.Invoke();yield return null;
+        Check(PickerCoordinator.IsOpen&&datePicker.dateSection.activeSelf&&EventSystem.current.currentSelectedGameObject?.GetComponent<InputField>()==null,"real date button opens picker without selecting input");
+        nav.Back();yield return null;Check(!PickerCoordinator.IsOpen&&work.eventDate.value=="2026-10-08","Back cancels picker without editing date");
+        work.recurrence.value=2;yield return null;
+        var chip=work.weekdays[0];var chipRect=(RectTransform)chip.transform;
+        var formScroll=work.eventPanel.GetComponentInChildren<ScrollRect>();
+        var localChip=formScroll.viewport.InverseTransformPoint(chipRect.TransformPoint(chipRect.rect.center));
+        formScroll.content.anchoredPosition-=new Vector2(0,localChip.y-formScroll.viewport.rect.center.y);yield return null;yield return null;
+        var chipPoint=RectTransformUtility.WorldToScreenPoint(null,chipRect.TransformPoint(chipRect.rect.center));
+        var chipPointer=new PointerEventData(EventSystem.current){position=chipPoint,button=PointerEventData.InputButton.Left};
+        var chipHits=new List<RaycastResult>();EventSystem.current.RaycastAll(chipPointer,chipHits);
+        Check(chipHits.Count>0&&chipHits[0].gameObject.GetComponentInParent<Toggle>()==chip,"weekday chip receives real pointer raycast");
+        bool selected=chip.isOn;ExecuteEvents.Execute(chip.gameObject,chipPointer,ExecuteEvents.pointerClickHandler);yield return null;Check(chip.isOn!=selected,"weekday pointer click toggles selection");
+        nav.Back();yield return null;nav.confirmation.Accept();yield return null;
         foreach(var theme in new[]{ThemeManager.Theme.MidnightGraphite,ThemeManager.Theme.DeepTeal,ThemeManager.Theme.SoftDaylight,ThemeManager.Theme.MidnightGraphite,ThemeManager.Theme.DeepTeal,ThemeManager.Theme.SoftDaylight})
         {
             var sample=nav.GetComponentsInChildren<ThemeSample>(true).Single(t=>t.choice==theme);var button=sample.GetComponent<Button>();

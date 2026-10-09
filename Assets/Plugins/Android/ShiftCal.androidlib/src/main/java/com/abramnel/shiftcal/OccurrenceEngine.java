@@ -14,7 +14,7 @@ public final class OccurrenceEngine {
             try { return LocalTime.parse(n, DateTimeFormatter.ofPattern(f,Locale.US)); } catch(Exception ignored) {}
         throw new IllegalArgumentException("Invalid start time: "+s);
     }
-    static ZoneId zone(String s) { return s.isEmpty()||s.equals("device")?ZoneId.systemDefault():ZoneId.of(s); }
+    static ZoneId zone(String s) { return s==null||s.isEmpty()||s.equals("device")?ZoneId.systemDefault():ZoneId.of(s); }
     static long instant(String date, String clock, String zone) { return LocalDate.parse(date).atTime(time(clock)).atZone(zone(zone)).toInstant().toEpochMilli(); }
     static boolean matches(JSONObject e, LocalDate d) {
         LocalDate start=LocalDate.parse(e.optString("dateKey"));
@@ -44,16 +44,20 @@ public final class OccurrenceEngine {
     static JSONObject make(String id,String source,String date,String title,long at,boolean audible,JSONObject options) throws JSONException {
         return new JSONObject().put("id",id).put("sourceId",source).put("dateKey",date).put("title",title).put("at",at)
             .put("audible",audible).put("vibration",options.optBoolean("vibration",true)).put("sound",options.optString("sound","alarm"))
+            .put("useDefaultAlarmSettings",options.optBoolean("useDefaultAlarmSettings")).put("notes",options.optString("notes"))
             .put("snoozeMinutes",Math.max(1,options.optInt("snoozeMinutes",10))).put("advanceMinutes",audible?options.optInt("advanceMinutes"):0);
     }
     static void event(List<JSONObject> list,JSONObject series,JSONObject detail,String original) throws JSONException {
         if(!detail.optBoolean("enabled",true))return;
         String id=series.optString("id"), date=detail==series?original:detail.optString("dateKey");
         long at=instant(date,detail.optString("startTime"),detail.optString("zone","device"));
-        if(detail.optBoolean("reminder")&&(!detail.optBoolean("alarm")||detail.optInt("reminderMinutes",15)>0))list.add(make("event:"+id+":"+original+":reminder",id,original,detail.optString("title")+" - reminder",at-detail.optInt("reminderMinutes",15)*60000L,false,detail));
-        if(detail.optBoolean("alarm"))list.add(make("event:"+id+":"+original+":alarm",id,original,detail.optString("title"),at,true,detail));
+        if(detail.optBoolean("reminder")&&(!detail.optBoolean("alarm")||detail.optInt("reminderMinutes",15)>0))list.add(make("event:"+id+":"+original+":reminder",id,original,detail.optString("title")+" - reminder",at-detail.optInt("reminderMinutes",15)*60000L,false,detail).put("isEvent",true).put("calendarDateKey",date));
+        if(detail.optBoolean("alarm"))list.add(make("event:"+id+":"+original+":alarm",id,original,detail.optString("title"),at,true,detail).put("isEvent",true).put("calendarDateKey",date));
     }
     public static List<JSONObject> resolve(JSONObject save,long now,int horizon) throws JSONException {
+        return resolve(save,now,horizon,false);
+    }
+    static List<JSONObject> resolve(JSONObject save,long now,int horizon,boolean includeCalendarOnly) throws JSONException {
         LocalDate from=Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().minusDays(2), to=from.plusDays(horizon+3);
         List<JSONObject> list=new ArrayList<>(); JSONArray events=array(save,"events"), exceptions=array(save,"exceptions"), muted=array(save,"mutedEvents");
         for(int i=0;i<events.length();i++){
@@ -82,12 +86,15 @@ public final class OccurrenceEngine {
             String key=d.toString(); int type=pattern.length()==0?0:pattern.optInt(Math.floorMod((int)java.time.temporal.ChronoUnit.DAYS.between(anchor,d),pattern.length()));
             for(int i=0;i<overrides.length();i++){JSONObject o=overrides.getJSONObject(i);if(o.optString("dateKey").equals(key)&&!o.optBoolean("scheduledShift"))type=o.optInt("shiftType");}
             JSONObject shift=null; for(int i=0;i<shifts.length();i++)if(shifts.getJSONObject(i).optInt("id")==type)shift=shifts.getJSONObject(i);
-            if(shift==null||shift.optString("startTime").isEmpty())continue;
-            long start=instant(key,shift.optString("startTime"),"device");
+            if(shift==null)continue;
             for(int i=0;i<rules.length();i++){
                 JSONObject r=rules.getJSONObject(i);boolean mutedRule=false;JSONArray muteRules=array(save,"mutedRules");for(int j=0;j<muteRules.length();j++)if(muteRules.optString(j).equals(r.optString("id")))mutedRule=true;
                 if(mutedRule)continue;if(!r.optString("groupId").isEmpty()&&!r.optString("groupId").equals(group.optString("groupId")))continue;if(!r.optBoolean("enabled",true)||r.optInt("shiftType")!=type)continue;
-                list.add(make("shift:"+r.optString("id")+":"+key,r.optString("id"),key,shift.optString("name")+" - "+r.optString("label"),start-r.optInt("beforeMinutes")*60000L,r.optBoolean("audible",true),r));
+                if(r.optBoolean("calendarOnly")&&!includeCalendarOnly||!r.optString("fromDate").isEmpty()&&key.compareTo(r.optString("fromDate"))<0)continue;
+                String clock=r.optInt("timingMode")==1?r.optString("fixedTime"):shift.optString("startTime");
+                long at;try{at=instant(key,clock,"device")-(r.optInt("timingMode")==0?r.optInt("beforeMinutes",90)*60000L:0);}catch(IllegalArgumentException invalid){continue;}
+                list.add(make("shift:"+r.optString("id")+":"+key,r.optString("id"),key,r.optString("label"),at,r.optBoolean("audible",true),r)
+                    .put("calendarDateKey",key).put("subtitle", "Repeats on "+shift.optString("name")+" shifts").put("calendarOnly",r.optBoolean("calendarOnly")));
             }
         }
         list.sort(Comparator.comparingLong(o->o.optLong("at"))); return list;

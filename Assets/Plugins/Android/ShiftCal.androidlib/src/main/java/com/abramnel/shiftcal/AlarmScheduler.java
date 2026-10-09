@@ -32,13 +32,28 @@ final class AlarmScheduler {
         JSONObject account=AlarmStore.account(root), ledger=account.getJSONObject("ledger"), save=account.optJSONObject("save");
         List<JSONObject> future=new ArrayList<>();
         if(root.optBoolean("active")&&save!=null){
-            List<JSONObject> resolved=OccurrenceEngine.resolve(save,now,45);Set<String> valid=new HashSet<>();for(JSONObject o:resolved){valid.add(o.optString("id"));if(o.optLong("at")>now&&!OccurrenceEngine.terminal(ledger,o.optString("id")))future.add(o);}
+            List<JSONObject> resolved=OccurrenceEngine.resolve(save,now,45);
+            JSONObject changes=account.optJSONObject("shiftChanges");
+            // A delivery moved away from its qualifying shift date still belongs
+            // to that date. Resolve stored edits through the same engine even when
+            // the original date lies outside the rolling native queue window.
+            if(changes!=null){Set<String> present=new HashSet<>();for(JSONObject o:resolved)present.add(o.optString("id"));
+                Iterator<String> changed=changes.keys();while(changed.hasNext()){
+                    String id=changed.next();if(present.contains(id))continue;
+                    long at=changes.optLong(id);if(at<=now||at>now+45L*86400000)continue;
+                    try{String date=id.substring(id.lastIndexOf(':')+1);long anchor=OccurrenceEngine.instant(date,"12:00","device");
+                        for(JSONObject o:OccurrenceEngine.resolve(save,anchor,0))if(o.optString("id").equals(id)){resolved.add(o);break;}
+                    }catch(IllegalArgumentException invalid){}
+                }
+            }
+            for(JSONObject o:resolved){String id=o.optString("id");if(changes!=null&&id.startsWith("shift:")&&changes.has(id))o.put("at",changes.getLong(id));AlarmPolicy.apply(o,AlarmPolicy.preferences(root));}
+            Set<String> valid=new HashSet<>();for(JSONObject o:resolved){valid.add(o.optString("id"));if(o.optLong("at")>now&&!OccurrenceEngine.terminal(ledger,o.optString("id")))future.add(o);}
             JSONObject test=account.optJSONObject("test");if(test!=null&&test.optLong("at")>now&&!OccurrenceEngine.terminal(ledger,test.optString("id")))future.add(test);
             Iterator<String> keys=ledger.keys();
             while(keys.hasNext()){
                 String id=keys.next();JSONObject state=ledger.getJSONObject(id);
                 if((state.optString("state").equals("snoozed")||state.optString("state").equals("ringing"))&&!valid.contains(id)&&!id.startsWith("test:")){state.put("state","cancelled");NativeBridge.stop(c,id);NativeBridge.remove(c,id);continue;}
-                if(state.optString("state").equals("snoozed")&&state.optLong("at")>now){JSONObject o=new JSONObject(state.getJSONObject("occurrence").toString());o.put("at",state.optLong("at"));future.removeIf(x->x.optString("id").equals(id));future.add(o);}
+                if(state.optString("state").equals("snoozed")&&state.optLong("at")>now){JSONObject o=new JSONObject(state.getJSONObject("occurrence").toString());o.put("at",state.optLong("at"));AlarmPolicy.apply(o,AlarmPolicy.preferences(root));future.removeIf(x->x.optString("id").equals(id));future.add(o);}
             }
         }
         future.sort(Comparator.comparingLong(o->o.optLong("at")));
@@ -53,21 +68,47 @@ final class AlarmScheduler {
             String id=scheduled.getString(i);JSONObject o=occurrences.getJSONObject(id);long at=o.getLong("at");
             if(o.optBoolean("audible"))manager(c).setAlarmClock(new AlarmManager.AlarmClockInfo(at,NativeBridge.open(c,id)),intent(c,id,"fire"));
             else manager(c).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,intent(c,id,"fire"));
-            long advance=at-o.optInt("advanceMinutes")*60000L;
-            if(o.optInt("advanceMinutes")>0&&!ledger.has(id)){
-                if(advance>now)manager(c).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,advance,intent(c,id,"advance"));
-                else NativeBridge.upcoming(c,o);
-            }
+            long advance=AlarmPolicy.advanceAt(o,now);
+            JSONObject notices=account.optJSONObject("notices");
+            if(advance>0&&!ledger.has(id)&&(notices==null||notices.optLong(id)!=at))
+                manager(c).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,advance,intent(c,id,"advance"));
         }
         Set<String> current=new HashSet<>();for(int i=0;i<scheduled.length();i++)current.add(scheduled.getString(i));
-        for(StatusBarNotificationWrapper n:NativeBridge.active(c))if(!current.contains(n.id)&&!n.ringing)NativeBridge.remove(c,n.id);
+        for(StatusBarNotificationWrapper n:NativeBridge.active(c)){
+            JSONObject o=occurrences.optJSONObject(n.id);
+            if(!n.ringing&&(!current.contains(n.id)||n.upcoming&&(o==null||o.optInt("advanceMinutes")==0)))NativeBridge.remove(c,n.id);
+        }
         manager(c).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,now+12*3600000L,intent(c,REPLENISH,"reconcile"));
+    }
+    // Check current ledger state while holding the account lock, so a notice that
+    // starts ringing while its UI is open is dismissed before navigation too.
+    static void prepareOpen(Context c,String id,String expectedAccount) throws Exception {
+        synchronized(AlarmStore.LOCK){
+            JSONObject root=AlarmStore.read(c);
+            if(!root.optString("account").equals(expectedAccount))throw new IllegalStateException("Calendar account changed.");
+            JSONObject entry=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);
+            if(AlarmPolicy.shouldDismissOnOpen(entry))action(c,"dismiss",id);
+            root=AlarmStore.read(c);root.put("pendingOpen",id);AlarmStore.write(c,root);
+        }
+    }
+    static void checkedAction(Context c,String action,String id,String expectedAccount) throws Exception {
+        synchronized(AlarmStore.LOCK){
+            if(!AlarmStore.read(c).optString("account").equals(expectedAccount))throw new IllegalStateException("Calendar account changed.");
+            action(c,action,id);
+        }
     }
     static void action(Context c,String action,String id) throws Exception {
         synchronized(AlarmStore.LOCK){
             JSONObject root=AlarmStore.read(c), account=AlarmStore.account(root), ledger=account.getJSONObject("ledger");
             JSONObject o=root.optJSONObject("occurrences")==null?null:root.getJSONObject("occurrences").optJSONObject(id);
             if(o==null){JSONObject entry=ledger.optJSONObject(id);if(entry!=null)o=entry.optJSONObject("occurrence");}
+            if(o==null&&id.startsWith("shift:")){
+                JSONObject save=account.optJSONObject("save");
+                if(save!=null)try{String date=id.substring(id.lastIndexOf(':')+1);
+                    for(JSONObject candidate:OccurrenceEngine.resolve(save,OccurrenceEngine.instant(date,"12:00","device"),0,true))
+                        if(candidate.optString("id").equals(id)){o=candidate;JSONObject changes=account.optJSONObject("shiftChanges");if(changes!=null&&changes.has(id))o.put("at",changes.getLong(id));break;}
+                }catch(IllegalArgumentException invalid){}
+            }
             if(action.equals("undo")){
                 JSONObject state=ledger.optJSONObject(id);
                 if(state!=null&&state.optString("state").equals("skipped")&&state.optLong("originalAt")>System.currentTimeMillis())ledger.remove(id);

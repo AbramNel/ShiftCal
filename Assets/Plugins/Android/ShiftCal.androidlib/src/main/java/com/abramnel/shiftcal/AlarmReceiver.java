@@ -16,10 +16,18 @@ public final class AlarmReceiver extends BroadcastReceiver {
                 if(!AlarmScheduler.notifications(c)||!NativeBridge.channel(c,o.optBoolean("audible")?"shiftcal_ring":"shiftcal_reminder"))return;
                 // Old PendingIntents cannot ring an occurrence whose trigger changed.
                 if("fire".equals(action)&&(o.optLong("at")>System.currentTimeMillis()+1000||System.currentTimeMillis()-o.optLong("at")>10*60000L)){AlarmScheduler.reconcile(c,root);return;}
-                if("advance".equals(action)){NativeBridge.upcoming(c,o);return;}
+                if("advance".equals(action)){
+                    if(!o.optBoolean("audible")||o.optInt("advanceMinutes")==0||o.optLong("at")<=System.currentTimeMillis()||ledger.has(id))return;
+                    long trigger=o.optLong("at")-o.optInt("advanceMinutes")*60000L;
+                    if(trigger>System.currentTimeMillis()+1000)return;
+                    JSONObject account=AlarmStore.account(root),notices=account.optJSONObject("notices");
+                    if(notices==null){notices=new JSONObject();account.put("notices",notices);}
+                    if(notices.optLong(id)==o.optLong("at"))return;
+                    notices.put(id,o.optLong("at"));AlarmStore.write(c,root);NativeBridge.upcoming(c,o);return;
+                }
                 ledger.put(id,new JSONObject().put("state",o.optBoolean("audible")?"ringing":"delivered").put("occurrence",o));
                 AlarmStore.write(c,root);NativeBridge.remove(c,id);
-                if(o.optBoolean("audible"))c.startForegroundService(new Intent(c,RingingService.class).setAction("ring").putExtra("occurrence",o.toString()));
+                if(o.optBoolean("audible"))c.startForegroundService(new Intent(c,RingingService.class).setAction("ring").putExtra("occurrence",o.toString()).putExtra("account",root.optString("account")));
                 else NativeBridge.nm(c).notify(id,1,NativeBridge.notification(c,o,false,false));
                 AlarmScheduler.reconcile(c,root);
             }

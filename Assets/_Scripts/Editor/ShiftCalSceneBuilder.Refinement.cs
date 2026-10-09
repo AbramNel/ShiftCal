@@ -23,7 +23,7 @@ public static partial class ShiftCalSceneBuilder
         bool circle=d>18&&d<22,hand=x>30&&x<34&&y>27&&y<44||y>27&&y<31&&x>30&&x<43;
         bool bells=Vector2.Distance(new Vector2(x,y),new Vector2(17,52))<8||Vector2.Distance(new Vector2(x,y),new Vector2(47,52))<8;
         bool feet=y>4&&y<12&&(x>15&&x<20||x>44&&x<49);
-        return circle||hand||bells||feet?1:0;
+        return circle||hand||(name!="Clock"&&(bells||feet))?1:0;
     },Vector4.zero);
     private static Sprite SelectionFrame => Artwork("SelectionFrame",(x,y)=> {
         float dx=Mathf.Max(Mathf.Abs(x-32)-18,0),dy=Mathf.Max(Mathf.Abs(y-32)-18,0);
@@ -74,13 +74,14 @@ public static partial class ShiftCalSceneBuilder
             UnityEventTools.AddStringPersistentListener(button.onClick,editor.Color,hex);
         }
         editor.swatch=CreateImage("Chosen color",content,Hex("#FBBF24"));editor.swatch.sprite=Rounded;editor.swatch.type=Image.Type.Sliced;AddLayoutElement(editor.swatch.gameObject,-1,34);
-        editor.startInput=Field(content,"shiftStart","Start time (5:30 AM or 17:30)");editor.endInput=Field(content,"shiftEnd","End time (leave both empty for OFF)");editor.timeError=ErrorText(content);
+        Body(content,"Shift times (optional)",48);var times=CreateHorizontalGroup("Shift time pickers",content,18,0,0,0,0);AddLayoutElement(times,-1,120);editor.startPicker=Picker(times.transform,"Shift start",false,true);editor.endPicker=Picker(times.transform,"Shift end",false,true);AddLayoutElement(editor.startPicker.gameObject,0,120,1);AddLayoutElement(editor.endPicker.gameObject,0,120,1);editor.timeError=ErrorText(content);
         editor.hours=Body(content,"Calculated hours",64);
+        Command(content,"Clear shift times",editor.ClearTimes);
         Command(content,"Advanced color",editor.ToggleAdvanced);
         editor.advanced=CreateVerticalGroup("Custom hex color",content,8,0,0,0,0);editor.advanced.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         editor.colorInput=Field(editor.advanced.transform,"shiftColor","Custom color (#FBBF24)");editor.colorError=ErrorText(editor.advanced.transform);
         editor.delete=Command(content,"Delete custom shift",editor.Delete);
-        foreach(var input in new[]{editor.startInput,editor.endInput,editor.colorInput})UnityEventTools.AddPersistentListener(input.onValueChanged,editor.PreviewChanged);
+        UnityEventTools.AddPersistentListener(editor.colorInput.onValueChanged,editor.PreviewChanged);UnityEventTools.AddPersistentListener(editor.startPicker.changed,editor.PreviewChanged);UnityEventTools.AddPersistentListener(editor.endPicker.changed,editor.PreviewChanged);
         var footer=CreateHorizontalGroup("Editor actions",card.transform,18,24,24,12,12);AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,0,8,0,150);
         var save=Command(footer.transform,"Save",editor.Save);AddLayoutElement(save.gameObject,0,-1,1);save.GetComponent<Image>().color=Primary;save.GetComponentInChildren<Text>().color=Hex("#04111F");
         overlay.SetActive(false);return editor;

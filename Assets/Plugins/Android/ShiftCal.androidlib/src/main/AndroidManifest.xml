@@ -22,6 +22,6 @@
             </intent-filter>
         </receiver>
         <service android:name="com.abramnel.shiftcal.RingingService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
-        <activity android:name="com.abramnel.shiftcal.AlarmActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:theme="@android:style/Theme.Material.NoActionBar" />
+        <activity android:name="com.abramnel.shiftcal.AlarmActivity" android:launchMode="singleTop" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:theme="@android:style/Theme.Material.NoActionBar" />
     </application>
 </manifest>

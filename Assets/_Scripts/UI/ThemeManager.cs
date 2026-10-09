@@ -39,6 +39,7 @@ namespace ShiftCal.UI
             Current = theme;
             foreach (var t in UnityEngine.Object.FindObjectsByType<ThemeManager>(FindObjectsInactive.Include, FindObjectsSortMode.None)) t.Paint();
             App.AndroidBridge.Call<string>("themeBars", IsDark, "#" + ColorUtility.ToHtmlStringRGB(Token(Role.Background)));
+            App.AndroidBridge.Call<string>("alarmTheme", (int)theme);
             Changed?.Invoke();
         }
         private void OnEnable() => Paint();

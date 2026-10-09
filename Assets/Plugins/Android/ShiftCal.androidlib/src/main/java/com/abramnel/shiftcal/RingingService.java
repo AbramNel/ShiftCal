@@ -9,22 +9,39 @@ import java.util.*;
 
 public final class RingingService extends Service {
     static volatile boolean running;
+    static volatile RingingService instance;
+    final Map<String,Runnable> timeouts=new HashMap<>();
+    String ringingAccount="";
     final Map<String,JSONObject> ringing=new LinkedHashMap<>();
     final Handler handler=new Handler(Looper.getMainLooper());
     MediaPlayer player;Vibrator vibrator;PowerManager.WakeLock wake;AudioManager audio;AudioFocusRequest focus;
     public IBinder onBind(Intent i){return null;}
-    public void onCreate(){super.onCreate();running=true;wake=((PowerManager)getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"ShiftCal:alarm");wake.acquire(11*60000L);}
+    public void onCreate(){super.onCreate();running=true;instance=this;wake=((PowerManager)getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"ShiftCal:alarm");wake.acquire(11*60000L);}
     public int onStartCommand(Intent i,int flags,int startId){
         if(i==null){stopSelf();return START_NOT_STICKY;}
         try{
-            if("stop".equals(i.getAction())){ringing.remove(i.getStringExtra("id"));}
+            if("stop".equals(i.getAction())){stopOccurrence(i.getStringExtra("id"));return START_NOT_STICKY;}
             else{
                 JSONObject o=new JSONObject(i.getStringExtra("occurrence"));String id=o.getString("id");
-                synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(this),entry=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);if(!root.optBoolean("active")||entry==null||!entry.optString("state").equals("ringing")){if(ringing.isEmpty())stopSelf();return START_NOT_STICKY;}}
+                synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(this),entry=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);if(!root.optString("account").equals(i.getStringExtra("account"))||!root.optBoolean("active")||entry==null||!entry.optString("state").equals("ringing")){if(ringing.isEmpty())stopSelf();return START_NOT_STICKY;}}
+                if(!ringingAccount.equals(i.getStringExtra("account"))){ringing.clear();handler.removeCallbacksAndMessages(null);timeouts.clear();}
+                ringingAccount=i.getStringExtra("account");
                 if(wake!=null&&!wake.isHeld())wake.acquire(11*60000L);ringing.put(id,o);
-                handler.postDelayed(()->{try{AlarmScheduler.action(this,"dismiss",id);}catch(Exception ignored){}},10*60000L);
+                Runnable old=timeouts.remove(id);if(old!=null)handler.removeCallbacks(old);
+                final String deliveryAccount=ringingAccount;
+                Runnable timeout=()->{try{AlarmScheduler.checkedAction(this,"dismiss",id,deliveryAccount);}catch(Exception ignored){}};timeouts.put(id,timeout);handler.postDelayed(timeout,10*60000L);
             }
-            if(ringing.isEmpty()){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return START_NOT_STICKY;}
+            refreshRinging();
+        }catch(Exception e){NativeBridge.error(this,e);android.util.Log.e("ShiftCal","Ringing failed",e);stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}
+        return START_NOT_STICKY;
+    }
+    void stopOccurrence(String id){
+        if(Looper.myLooper()!=Looper.getMainLooper()){handler.post(()->stopOccurrence(id));return;}
+        ringing.remove(id);Runnable timeout=timeouts.remove(id);if(timeout!=null)handler.removeCallbacks(timeout);NativeBridge.remove(this,id);
+        try{refreshRinging();}catch(Exception e){NativeBridge.error(this,e);stopSelf();}
+    }
+    private void refreshRinging() throws Exception {
+            if(ringing.isEmpty()){releaseAudio();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return;}
             JSONObject first=ringing.values().iterator().next();
             NativeBridge.remove(this,first.optString("id"));
             startForeground(42,NativeBridge.notification(this,first,true,false));
@@ -40,9 +57,7 @@ public final class RingingService extends Service {
                 player=new MediaPlayer();player.setAudioAttributes(attrs);player.setDataSource(this,sound);player.setLooping(true);player.prepare();player.start();
             }
             if(vibrate){vibrator=(Vibrator)getSystemService(VIBRATOR_SERVICE);vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0,500,700},0));}
-        }catch(Exception e){NativeBridge.error(this,e);android.util.Log.e("ShiftCal","Ringing failed",e);stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}
-        return START_NOT_STICKY;
     }
     void releaseAudio(){if(player!=null){try{player.stop();}catch(Exception ignored){}player.release();player=null;}if(vibrator!=null)vibrator.cancel();if(audio!=null&&focus!=null)audio.abandonAudioFocusRequest(focus);focus=null;}
-    public void onDestroy(){handler.removeCallbacksAndMessages(null);releaseAudio();for(String id:ringing.keySet())NativeBridge.remove(this,id);if(wake!=null&&wake.isHeld())wake.release();running=false;super.onDestroy();}
+    public void onDestroy(){handler.removeCallbacksAndMessages(null);releaseAudio();for(String id:ringing.keySet())NativeBridge.remove(this,id);if(wake!=null&&wake.isHeld())wake.release();running=false;instance=null;super.onDestroy();}
 }

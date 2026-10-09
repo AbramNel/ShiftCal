@@ -15,7 +15,6 @@ public static partial class ShiftCalSceneBuilder
         var work=root.gameObject.AddComponent<ScheduleWorkbench>();
         work.agendaPanel=CreateScreen("Events and Alarms",root);
         work.eventPanel=CreateScreen("Event Editor",root);
-        work.rulePanel=CreateScreen("Shift Alarm Editor",root);
         var agenda=ScreenContent(work.agendaPanel,"Events & alarms");
         var back=CreateButton("Agenda Back Button",work.agendaPanel.transform,"Back",Vector2.zero,Vector2.zero,Color.clear,Primary,38);
         AnchorStretch(back.GetComponent<RectTransform>(),1,1,1,1,-192,-140,-24,-12);
@@ -34,41 +33,52 @@ public static partial class ShiftCalSceneBuilder
         var occurrences=CreateVerticalGroup("Individual deliveries",work.upcomingSection.transform,20,0,0,0,0);occurrences.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         work.upcomingContent=occurrences.transform;work.showMore=Command(work.upcomingSection.transform,"Show more",work.MoreUpcoming);work.upcomingSection.SetActive(false);
 
-        var form=ScreenContent(work.eventPanel,"Event");
-        work.eventFields.Add(Field(form,"title","Title"));
-        work.eventFields.Add(Field(form,"date","Date (YYYY-MM-DD)"));
-        work.eventFields.Add(Field(form,"start","Start (1:00 PM)"));
-        work.eventFields.Add(Field(form,"end","End (optional)"));
-        work.eventFields.Add(Field(form,"zone","Time zone (America/Chicago or device)"));
-        work.recurrence=Choice(form,"Repeats",new[]{"Once","Daily","Weekly","Monthly"});
-        work.eventFields.Add(Field(form,"interval","Every N days / weeks / months"));
-        var dayRow=CreateHorizontalGroup("Weekdays",form,10,0,0,0,0);AddLayoutElement(dayRow,-1,144);
-        work.weekdays=new Toggle[7];string[] days={"Su","Mo","Tu","We","Th","Fr","Sa"};
-        for(int i=0;i<7;i++)work.weekdays[i]=Check(dayRow.transform,days[i],false,70);
-        work.eventFields.Add(Field(form,"until","Through date (optional)"));
-        work.eventFields.Add(Field(form,"count","Occurrence count (0 = unlimited)"));
-        work.eventFields.Add(Field(form,"notes","Notes (optional)",true));
-        work.eventEnabled=Check(form,"Reminders and alarms enabled");
-        work.eventReminder=Check(form,"Advance reminder");
-        work.eventFields.Add(Field(form,"reminder","Reminder minutes before"));
-        work.eventAlarm=Check(form,"Audible alarm at event time");
-        work.eventFields.Add(Field(form,"advance","Upcoming alarm notice (minutes; 0 = off)"));
-        work.eventVibration=Check(form,"Vibration");
-        work.eventSound=Choice(form,"Sound",new[]{"Device alarm","Device notification","Silent"});
-        work.eventFields.Add(Field(form,"snooze","Snooze minutes"));
-        work.editScope=Choice(form,"Apply edit / deletion to",new[]{"This occurrence","This and future","Entire series"});
-        Command(form,"Delete event",work.DeleteEvent);
+        var form=ScreenContent(work.eventPanel,"New event");
+        work.editorHeading=FindChild(work.eventPanel.transform,"Top Bar Title").GetComponent<Text>();
+        work.contextSection=Section(form,"Applies to");work.dayContextChoice=Choice(work.contextSection.transform,"Create for",new[]{"This date only","Every matching shift"});
+        work.eventFields.Add(CompactField(form,"title","Title"));
+        var dateTime=CreateHorizontalGroup("Date and time",form,18,0,0,0,0);AddLayoutElement(dateTime,-1,120);
+        work.eventDate=Picker(dateTime.transform,"Event date",true);AddLayoutElement(work.eventDate.gameObject,0,120,1);
+        work.timeSection=CreateVerticalGroup("Time section",dateTime.transform,0,0,0,0,0);AddLayoutElement(work.timeSection,0,120,1);
+        work.eventTime=Picker(work.timeSection.transform,"Event time",false);
+        work.recurrence=Choice(form,"Repeat",new[]{"Once","Daily","Weekly","Monthly","On shift days"});
+        work.intervalSection=Section(form,"Interval section");work.intervalLabel=Body(work.intervalSection.transform,"Every N days",48);
+        work.eventFields.Add(CompactField(work.intervalSection.transform,"interval","",false,true));
+        work.weekdaySection=Section(form,"Weekday section");
+        var dayRow=CreateHorizontalGroup("Weekday chips",work.weekdaySection.transform,8,0,0,0,0);AddLayoutElement(dayRow,-1,112);
+        work.weekdays=new Toggle[7];string[] days={"S","M","T","W","T","F","S"};
+        for(int i=0;i<7;i++)
+        {
+            var chip=CreateButton("Weekday "+i,dayRow.transform,days[i],Vector2.zero,Vector2.zero,Input,TextDark,34);AddLayoutElement(chip.gameObject,0,112,1);
+            var chipObject=chip.gameObject;Object.DestroyImmediate(chip);var toggle=chipObject.AddComponent<Toggle>();toggle.targetGraphic=toggle.GetComponent<Image>();
+            var selected=CreateImage("Selected weekday",toggle.transform,Primary);selected.sprite=SelectionFrame;selected.type=Image.Type.Sliced;selected.raycastTarget=false;Stretch(selected.rectTransform);toggle.graphic=selected;toggle.isOn=false;work.weekdays[i]=toggle;
+        }
+        work.endingSection=Section(form,"Repeat ending");work.repeatEnding=Choice(work.endingSection.transform,"Ends",new[]{"Never","On date","After N occurrences"});
+        work.endingDateSection=Section(work.endingSection.transform,"End date section");work.endingDate=Picker(work.endingDateSection.transform,"Ending date",true);
+        work.countSection=Section(work.endingSection.transform,"Count section");work.eventFields.Add(CompactField(work.countSection.transform,"count","Occurrences",false,true));
+        work.shiftSection=Section(form,"Linked shift section");work.linkedShift=Choice(work.shiftSection.transform,"Shift",new[]{"Day-12"},true);
+        work.linkedSwatch=CreateImage("Linked shift color",work.linkedShift.transform,Hex("#FBBF24"));AnchorStretch(work.linkedSwatch.rectTransform,0,.5f,0,.5f,18,-20,58,20);work.linkedSwatch.raycastTarget=false;
+        AnchorStretch(work.linkedShift.captionText.rectTransform,0,0,1,1,76,8,-60,-8);
+        work.timingMode=Choice(work.shiftSection.transform,"Timing",new[]{"Before shift start","Specific time"});
+        work.beforeSection=Section(form,"Before shift section");work.beforeShift=Duration(work.beforeSection.transform,"Before shift",new[]{15,30,60,90,120},1440);
+        work.beforeShift.minimum=0;
+        work.timingPreview=Body(form,"",110);work.timingPreview.fontSize=30;
+        work.eventAlarm=Check(form,"Alarm?",true,96);
+        work.reminderChoice=Duration(form,"Remind before",new[]{0,5,10,15,30,60,-1},10080);
+        work.eventFields.Add(CompactField(form,"notes","Notes (optional)",true));
+        work.advancedButton=Command(form,"Advanced alarm settings",work.ToggleAdvanced).gameObject;
+        work.advancedSection=Section(form,"Advanced alarm section");
+        work.eventEnabled=Check(work.advancedSection.transform,"Enabled",true,96);
+        work.defaultSettings=Check(work.advancedSection.transform,"Use device alarm preferences",true,96);
+        work.overrideSection=Section(work.advancedSection.transform,"Per-event overrides");
+        work.eventVibration=Check(work.overrideSection.transform,"Vibration",true,96);
+        work.eventSound=Choice(work.overrideSection.transform,"Sound",new[]{"Device alarm","Device notification","Silent"});
+        work.snoozeOverride=Duration(work.overrideSection.transform,"Snooze",new[]{5,10,15,20,30},120);
+        work.scopeSection=Section(form,"Edit scope section");work.editScope=Choice(work.scopeSection.transform,"Apply edit / deletion to",new[]{"This occurrence","This and future occurrences","Entire series"});
+        work.deleteButton=Command(form,"Delete event",work.DeleteEvent).gameObject;
         EditorFooter(work.eventPanel,work.SaveEvent,work.CancelEditor);
-
-        var rule=ScreenContent(work.rulePanel,"Shift alarm");
-        work.ruleShift=Choice(rule,"Shift",new[]{"Day-12"});
-        work.ruleFields.Add(Field(rule,"label","Label"));
-        work.ruleFields.Add(Field(rule,"offset","Minutes before shift start"));
-        work.ruleEnabled=Check(rule,"Enabled");work.ruleAudible=Check(rule,"Audible alarm");work.ruleVibration=Check(rule,"Vibration");
-        work.ruleSound=Choice(rule,"Sound",new[]{"Device alarm","Device notification","Silent"});
-        work.ruleFields.Add(Field(rule,"snooze","Snooze minutes"));work.ruleFields.Add(Field(rule,"advance","Upcoming notice minutes (0 = off)"));
-        Command(rule,"Delete alarm rule",work.DeleteRule);
-        EditorFooter(work.rulePanel,work.SaveRule,work.CancelEditor);
+        // All shift rules use the same compact form; no second competing editor.
+        CreatePickerDialog(root);
 
         var settingsContent=FindChild(settings.transform,"Settings Scroll Content");
         work.accountLabel=FindChild(settings.transform,"Account Label").GetComponent<Text>();
@@ -76,6 +86,13 @@ public static partial class ShiftCalSceneBuilder
         work.accountDetailsLabel=FindChild(account.transform,"Account Details Label").GetComponent<Text>();
         work.accountStateLabel=FindChild(account.transform,"Account State Label").GetComponent<Text>();
         UnityEventTools.AddPersistentListener(FindChild(settings.transform,"Events & Alarms").GetComponent<Button>().onClick,work.ShowAgenda);
+        var preferencesCard=SettingsCard(settingsContent,"Alarm Preferences");var preferences=preferencesCard.gameObject.AddComponent<AlarmPreferencesPanel>();
+        preferences.upcoming=Check(preferencesCard,"Upcoming alarm notices",true,96);
+        preferences.noticeSection=Section(preferencesCard,"Notice duration section");preferences.notice=Duration(preferences.noticeSection.transform,"Notice before",new[]{5,10,15,30,60},10080);
+        preferences.snooze=Duration(preferencesCard,"Default snooze",new[]{5,10,15,20,30},120);
+        preferences.sound=Choice(preferencesCard,"Sound",new[]{"Device alarm","Device notification","Silent"});preferences.vibration=Check(preferencesCard,"Vibration",true,96);
+        Command(preferencesCard,"Save alarm preferences",preferences.Save);preferences.message=Body(preferencesCard,"",70);preferences.message.fontSize=30;
+        preferences.Load();
         var sharing=SettingsCard(settingsContent,"Data & Sharing");
         var groupContent=Expandable(sharing,"Shared Groups");
         work.groupName=Field(groupContent,"groupName","New group name");Command(groupContent,"Create group",work.CreateGroup);
@@ -116,9 +133,53 @@ public static partial class ShiftCalSceneBuilder
         AnchorStretch(close.GetComponent<RectTransform>(),1,1,1,1,-160,-148,-24,-12);UnityEventTools.AddPersistentListener(close.onClick,cancel);
         var footer=CreateHorizontalGroup("Editor actions",screen.transform,20,0,0,0,0);
         AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,32,24,-32,156);
-        var commit=Command(footer.transform,"Save",save);AddLayoutElement(commit.gameObject,0,-1,1);
+        var discard=Command(footer.transform,"Cancel",cancel);AddLayoutElement(discard.gameObject,0,-1,1);
+        var commit=Command(footer.transform,"Save Event",save);AddLayoutElement(commit.gameObject,0,-1,1);
         commit.GetComponent<Image>().color=Primary;commit.GetComponentInChildren<Text>().color=Hex("#04111F");
         var content=screen.GetComponentInChildren<ScrollRect>(true).GetComponent<RectTransform>();content.offsetMin=new Vector2(content.offsetMin.x,180);
+    }
+    private static GameObject Section(Transform parent,string name)
+    {
+        var section=CreateVerticalGroup(name,parent,12,0,0,0,0);section.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;return section;
+    }
+    private static InputField CompactField(Transform parent,string key,string label,bool multiline=false,bool number=false)
+    {
+        if(!string.IsNullOrEmpty(label))Body(parent,label,48);
+        var field=CreateInputField(key,parent,label);AddLayoutElement(field.gameObject,-1,multiline?168:120);field.textComponent.fontSize=36;
+        if(multiline)field.lineType=InputField.LineType.MultiLineNewline;if(number)field.contentType=InputField.ContentType.IntegerNumber;return field;
+    }
+    private static PickerField Picker(Transform parent,string name,bool date,bool optional=false)
+    {
+        var button=CreateButton(name,parent,"Choose "+(date?"date":"time"),Vector2.zero,Vector2.zero,Input,TextDark,34);AddLayoutElement(button.gameObject,-1,120);
+        var field=button.gameObject.AddComponent<PickerField>();field.isDate=date;field.optional=optional;field.caption=button.GetComponentInChildren<Text>();
+        field.caption.alignment=TextAnchor.MiddleLeft;AnchorStretch(field.caption.rectTransform,0,0,1,1,76,0,-12,0);
+        var icon=CreateImage(date?"Calendar icon":"Clock icon",button.transform,Primary);icon.sprite=Icon(date?"Note":"Clock");AnchorStretch(icon.rectTransform,0,.5f,0,.5f,18,-23,64,23);icon.raycastTarget=false;
+        UnityEventTools.AddPersistentListener(button.onClick,field.Open);return field;
+    }
+    private static DurationChoice Duration(Transform parent,string label,int[] values,int maximum)
+    {
+        var section=Section(parent,label+" duration");var duration=section.AddComponent<DurationChoice>();duration.minutes=values;duration.maximum=maximum;
+        duration.choice=Choice(section.transform,label,System.Array.ConvertAll(values,v=>v==0?"Off":v<0?"At event time":v==60?"1 hour":v+" min"));duration.choice.AddOptions(new List<string>{"Custom"});
+        var custom=Section(section.transform,"Custom "+label);duration.custom=CompactField(custom.transform,"minutes","Minutes",false,true);custom.SetActive(false);return duration;
+    }
+    private static void CreatePickerDialog(Transform root)
+    {
+        var overlay=CreatePanel("Date Time Picker",root,Hex("#000000AA"));Stretch(overlay.GetComponent<RectTransform>());overlay.GetComponent<Image>().raycastTarget=true;overlay.AddComponent<ModalPanel>().dismissOutside=false;
+        var picker=overlay.AddComponent<UnityPickerDialog>();
+        var card=CreatePanel("Picker card",overlay.transform,Card);AnchorStretch(card.GetComponent<RectTransform>(),0,.5f,1,.5f,28,-258,-28,258);card.GetComponent<Image>().raycastTarget=true;
+        var body=Section(card.transform,"Picker controls");AnchorStretch(body.GetComponent<RectTransform>(),0,0,1,1,28,28,-28,-28);Object.DestroyImmediate(body.GetComponent<ContentSizeFitter>());
+        picker.heading=Body(body.transform,"Choose date",70);picker.heading.fontStyle=FontStyle.Bold;
+        picker.dateSection=CreateHorizontalGroup("Date selectors",body.transform,12,0,0,0,0);AddLayoutElement(picker.dateSection,-1,196);
+        var year=Section(picker.dateSection.transform,"Year selector");var month=Section(picker.dateSection.transform,"Month selector");var day=Section(picker.dateSection.transform,"Day selector");
+        foreach(var section in new[]{year,month,day})AddLayoutElement(section,0,196,1);
+        picker.year=Choice(year.transform,"Year",new[]{"2026"});picker.month=Choice(month.transform,"Month",new[]{"Oct"});picker.day=Choice(day.transform,"Day",new[]{"8"});
+        picker.timeSection=CreateHorizontalGroup("Time selectors",body.transform,16,0,0,0,0);AddLayoutElement(picker.timeSection,-1,196);
+        var hour=Section(picker.timeSection.transform,"Hour selector");var minute=Section(picker.timeSection.transform,"Minute selector");foreach(var section in new[]{hour,minute})AddLayoutElement(section,0,196,1);
+        picker.hour=Choice(hour.transform,"Hour",new[]{"4 AM"});picker.minute=Choice(minute.transform,"Minute",new[]{"00"});
+        picker.clearButton=Command(body.transform,"Clear time",picker.Clear).gameObject;AddLayoutElement(picker.clearButton,-1,60);
+        var actions=CreateHorizontalGroup("Picker actions",body.transform,18,0,0,0,0);AddLayoutElement(actions,-1,120);
+        foreach(var button in new[]{Command(actions.transform,"Cancel",picker.Cancel),Command(actions.transform,"OK",picker.Accept)})AddLayoutElement(button.gameObject,0,120,1);
+        overlay.SetActive(false);
     }
     private static InputField Field(Transform content,string key,string label,bool multiline=false)
     {
@@ -145,11 +206,11 @@ public static partial class ShiftCalSceneBuilder
         var text=CreateText(label+" Label",row.transform,label,30,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AddLayoutElement(text.gameObject,0,-1,1);
         var check=CreateToggle(label,row.transform);AddLayoutElement(check.gameObject,64,64);check.isOn=initial;return check;
     }
-    private static Dropdown Choice(Transform content,string label,string[] values)
+    private static Dropdown Choice(Transform content,string label,string[] values,bool shift=false)
     {
         Body(content,label,label.Length>42?90:56);
         var root=CreatePanel(label,content,Input);AddLayoutElement(root,-1,128);
-        var drop=root.AddComponent<Dropdown>();drop.targetGraphic=root.GetComponent<Image>();
+        Dropdown drop=shift?root.AddComponent<ShiftDropdown>():root.AddComponent<Dropdown>();drop.targetGraphic=root.GetComponent<Image>();
         var caption=CreateText("Value",root.transform,values[0],34,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(caption.rectTransform,0,0,1,1,24,8,-60,-8);drop.captionText=caption;
         var arrow=CreateText("Arrow",root.transform,"v",30,Primary,TextAnchor.MiddleRight,FontStyle.Bold);Stretch(arrow.rectTransform);
         var template=CreatePanel("Template",root.transform,Card);AnchorStretch(template.GetComponent<RectTransform>(),0,0,1,0,0,-600,0,0);
@@ -159,14 +220,16 @@ public static partial class ShiftCalSceneBuilder
         var item=CreatePanel("Item",inner.transform,Input);AnchorStretch(item.GetComponent<RectTransform>(),0,0,1,1,0,0,0,0);
         var toggle=item.AddComponent<Toggle>();toggle.targetGraphic=item.GetComponent<Image>();
         var text=CreateText("Item Label",item.transform,"Option",34,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(text.rectTransform,0,0,1,1,24,8,-24,-8);
+        if(shift){var swatch=CreateImage("Shift option color",item.transform,Color.white);swatch.sprite=Rounded;swatch.type=Image.Type.Sliced;swatch.raycastTarget=false;AnchorStretch(swatch.rectTransform,0,.5f,0,.5f,18,-20,58,20);AnchorStretch(text.rectTransform,0,0,1,1,76,8,-24,-8);}
         drop.itemText=text;drop.template=template.GetComponent<RectTransform>();scroll.viewport=viewport.GetComponent<RectTransform>();scroll.content=inner.GetComponent<RectTransform>();
         template.SetActive(false);drop.AddOptions(new List<string>(values));return drop;
     }
     private static ScheduleListRow BuildScheduleRowPrefab()
     {
-        var obj=CreateVerticalGroup("ScheduleListRow",null,10,24,24,20,20);var image=obj.AddComponent<Image>();image.sprite=Rounded;image.type=Image.Type.Sliced;image.color=CardSoft;AddLayoutElement(obj,-1,300);
+        var obj=CreateVerticalGroup("ScheduleListRow",null,10,24,24,20,20);var image=obj.AddComponent<Image>();image.sprite=Rounded;image.type=Image.Type.Sliced;image.color=CardSoft;
+        obj.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         obj.AddComponent<Button>().targetGraphic=image;
-        var row=obj.AddComponent<ScheduleListRow>();row.title=Body(obj.transform,"Title",58);row.title.fontSize=42;row.title.fontStyle=FontStyle.Bold;row.subtitle=Body(obj.transform,"Detail",112);row.subtitle.fontSize=34;
+        var row=obj.AddComponent<ScheduleListRow>();row.title=Body(obj.transform,"Title",-1);row.title.fontSize=42;row.title.fontStyle=FontStyle.Bold;row.subtitle=Body(obj.transform,"Detail",-1);row.subtitle.fontSize=34;
         var buttons=CreateHorizontalGroup("Actions",obj.transform,14,0,0,0,0);AddLayoutElement(buttons,-1,104);
         row.first=Command(buttons.transform,"Edit",null);row.second=Command(buttons.transform,"Pause",null);row.third=Command(buttons.transform,"Upcoming",null);
         foreach(var button in new[]{row.first,row.second,row.third}){AddLayoutElement(button.gameObject,0,104,1);button.GetComponentInChildren<Text>().fontSize=34;}
@@ -182,7 +245,7 @@ public static partial class ShiftCalSceneBuilder
     {
         foreach(var graphic in root.GetComponentsInChildren<Graphic>(true))
         {
-            if(graphic.GetComponentInParent<ThemeSample>(true)!=null||graphic.name=="Logo"||graphic.name=="Chosen color"||graphic.name=="Day Details Color"||graphic.name=="Preview shift color"||graphic.name=="Choice swatch"||graphic.GetComponentInParent<ShiftDayNavigator>(true)!=null||graphic.name.StartsWith("Color #")||graphic.name=="Theme preview"||graphic.GetComponentInParent<CalendarDayCell>(true)!=null||graphic.GetComponentInParent<ShiftSettingRow>(true)!=null&&graphic.name=="ColorSwatch")continue;
+            if(graphic.GetComponentInParent<ThemeSample>(true)!=null||graphic.name=="Logo"||graphic.name=="Chosen color"||graphic.name=="Day Details Color"||graphic.name=="Preview shift color"||graphic.name=="Choice swatch"||graphic.name=="Linked shift color"||graphic.name=="Shift option color"||graphic.GetComponentInParent<ShiftDayNavigator>(true)!=null||graphic.name.StartsWith("Color #")||graphic.name=="Theme preview"||graphic.GetComponentInParent<CalendarDayCell>(true)!=null||graphic.GetComponentInParent<ShiftSettingRow>(true)!=null&&graphic.name=="ColorSwatch")continue;
             ThemeManager.Role? role=null;Color color=graphic.color;
             if(graphic is Text){if(color==TextDark||color==Color.white)role=ThemeManager.Role.Text;else if(color==Danger)role=ThemeManager.Role.Destructive;else if(color==Hex("#04111F"))role=ThemeManager.Role.OnAccent;else if(color==TextMuted)role=ThemeManager.Role.Muted;else if(color==Primary)role=ThemeManager.Role.Accent;}
             else if(color==Background||color==Header)role=ThemeManager.Role.Background;

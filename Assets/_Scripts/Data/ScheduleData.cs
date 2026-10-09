@@ -26,6 +26,7 @@ namespace ShiftCal.Data
         public string sound = "alarm";
         public int snoozeMinutes = 10;
         public int advanceMinutes;
+        public bool useDefaultAlarmSettings;
     }
     [Serializable] public class EventException
     {
@@ -48,7 +49,25 @@ namespace ShiftCal.Data
         public string sound = "alarm";
         public int snoozeMinutes = 10;
         public int advanceMinutes = 60;
+        // Zero preserves the relative timing of version-3 rules already installed.
+        public ShiftTimingMode timingMode;
+        public string fixedTime;
+        public string notes;
+        public string fromDate;
+        public bool calendarOnly;
+        public bool useDefaultAlarmSettings;
     }
+    public enum ShiftTimingMode { BeforeStart, FixedTime }
+    [Serializable] public class AlarmPreferences
+    {
+        public bool upcomingNotices = true;
+        public int noticeMinutes = 15;
+        public int snoozeMinutes = 10;
+        public string sound = "alarm";
+        public bool vibration = true;
+    }
+    [Serializable] public class ShiftDeliveryChange { public string id; public long at; }
+    [Serializable] public class ShiftDeliveryChanges { public List<ShiftDeliveryChange> items = new List<ShiftDeliveryChange>(); }
     [Serializable] public class SyncRecord
     {
         public string key;
@@ -90,6 +109,8 @@ namespace ShiftCal.Data
         public int advanceMinutes;
         public bool isEvent;
         public string state;
+        public string subtitle;
+        public string notes;
     }
     [Serializable] public class OccurrenceList { public List<Occurrence> items = new List<Occurrence>(); }
 }

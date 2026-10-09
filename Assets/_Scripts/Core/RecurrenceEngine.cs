@@ -73,18 +73,41 @@ namespace ShiftCal.Core
                     if (d >= from.Date && d <= to.Date) AddEvent(result, e, ex.replacement, ex.originalDate,e.enabled&&!s.mutedEvents.Contains(e.id));
                 }
             }
-            if (s.group != null)
-                for (DateTime d = from.Date; d <= to.Date; d = d.AddDays(1))
+            result.AddRange(ShiftDates(s, from, to));
+            return result.OrderBy(x => x.at).ToList();
+        }
+        public static List<Occurrence> ShiftDates(ScheduleSave s, DateTime from, DateTime to, bool includePaused = false)
+        {
+            var result = new List<Occurrence>();
+            if (s.group == null) return result;
+            var changes = App.ShiftDeliveryExceptions.Read().items;
+            for (DateTime d = from.Date; d <= to.Date; d = d.AddDays(1))
+            {
+                string key = DateKeyUtility.ToDateKey(d);
+                int type = s.overrides.Find(o => o.dateKey == key && !o.scheduledShift)?.shiftType
+                    ?? ShiftPatternUtility.Resolve(s.group.pattern, s.group.startDateKey, d);
+                var shift = s.group.shiftTypes.Find(x => x.id == type);
+                if (shift == null) continue;
+                foreach (var rule in s.rules.Where(r => r.shiftType == type &&
+                    (string.IsNullOrEmpty(r.groupId) || r.groupId == s.group.groupId) &&
+                    (string.IsNullOrEmpty(r.fromDate) || string.CompareOrdinal(key, r.fromDate) >= 0)))
                 {
-                    string key = DateKeyUtility.ToDateKey(d);
-                    int type = s.overrides.Find(o => o.dateKey == key && !o.scheduledShift)?.shiftType ?? ShiftPatternUtility.Resolve(s.group.pattern, s.group.startDateKey, d);
-                    var shift = s.group.shiftTypes.Find(x => x.id == type);
-                    if (shift == null || !ShiftTimeUtility.TryParseTime(shift.startTime, out _)) continue;
-                    foreach (var rule in s.rules.Where(r => r.enabled && !s.mutedRules.Contains(r.id) && r.shiftType == type && (string.IsNullOrEmpty(r.groupId)||r.groupId==s.group.groupId)))
-                        result.Add(new Occurrence { id = "shift:" + rule.id + ":" + key, sourceId = rule.id, dateKey = key,
-                            title = shift.name + " - " + rule.label, at = Instant(d, shift.startTime, "device") - rule.beforeMinutes * 60000L,
-                            audible = rule.audible, vibration = rule.vibration, sound = rule.sound, snoozeMinutes = rule.snoozeMinutes, advanceMinutes = rule.advanceMinutes });
+                    bool active = rule.enabled && !s.mutedRules.Contains(rule.id);
+                    if (!active && !includePaused) continue;
+                    string clock = rule.timingMode == ShiftTimingMode.FixedTime ? rule.fixedTime : shift.startTime;
+                    if (!ShiftTimeUtility.TryParseTime(clock, out _)) continue;
+                    long at = Instant(d, clock, "device") - (rule.timingMode == ShiftTimingMode.BeforeStart ? rule.beforeMinutes * 60000L : 0);
+                    string id = "shift:" + rule.id + ":" + key;
+                    var change = changes.Find(x => x.id == id); if (change != null) at = change.at;
+                    var occurrence = new Occurrence { id = id, sourceId = rule.id, dateKey = key, calendarDateKey = key,
+                        title = rule.label, subtitle = "Repeats on " + shift.name + " shifts", notes = rule.notes, at = at,
+                        audible = active && !rule.calendarOnly && rule.audible, vibration = rule.vibration,
+                        sound = rule.sound, snoozeMinutes = rule.snoozeMinutes, advanceMinutes = rule.advanceMinutes,
+                        state = !active ? "paused" : rule.calendarOnly ? "view" : "" };
+                    App.DeviceAlarmPreferences.Apply(occurrence, rule.useDefaultAlarmSettings);
+                    result.Add(occurrence);
                 }
+            }
             return result.OrderBy(x => x.at).ToList();
         }
         private static void AddEvent(List<Occurrence> list, EventSeries series, EventSeries detail, string original,bool alerts)
@@ -99,10 +122,12 @@ namespace ShiftCal.Core
         }
         private static Occurrence Make(EventSeries e, EventSeries detail, string key, long at, bool audible, string kind)
         {
-            return new Occurrence { id = "event:" + e.id + ":" + key + ":" + kind, sourceId = e.id, dateKey = key,
+            var occurrence = new Occurrence { id = "event:" + e.id + ":" + key + ":" + kind, sourceId = e.id, dateKey = key,
                 calendarDateKey=ReferenceEquals(e,detail)?key:detail.dateKey,
-                title = detail.title + (kind == "reminder" ? " - reminder" : ""), at = at, audible = audible, vibration = detail.vibration,
+                title = detail.title + (kind == "reminder" ? " - reminder" : ""), notes = detail.notes, at = at, audible = audible, vibration = detail.vibration,
                 sound = detail.sound, snoozeMinutes = detail.snoozeMinutes, advanceMinutes = audible ? detail.advanceMinutes : 0, isEvent = true };
+            App.DeviceAlarmPreferences.Apply(occurrence, detail.useDefaultAlarmSettings);
+            return occurrence;
         }
         public static List<Occurrence> EventDates(ScheduleSave save,EventSeries e,DateTime from,DateTime to)
         {

@@ -99,17 +99,77 @@ public static class ShiftCalChecks
         Check(iconCell.transform.Find("Alarm indicator").GetComponent<Image>().sprite!=null&&iconCell.transform.Find("Note indicator").GetComponent<Image>().sprite!=null,"crisp alarm/note sprites assigned");
         Check(iconCell.GetComponent<Image>().sprite!=null,"rounded cell sprite assigned");
         var work=Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include);
-        Check(work!=null&&work.rowPrefab!=null&&work.eventFields.Count==12&&work.ruleFields.Count==4&&work.weekdays.Length==7,"event/alarm editor fields and prefab wired");
+        Check(work!=null&&work.rowPrefab!=null&&work.eventFields.Count==4&&work.eventDate!=null&&work.eventTime!=null&&work.weekdays.Length==7,"event/alarm editor fields and prefab wired");
         work.NewEvent("2026-07-02");work.eventFields.Find(x=>x.name=="title").text="Shutdown meeting";work.recurrence.value=2;work.eventAlarm.isOn=true;work.SaveEvent();
         Check(session.Data.events.Count==1&&session.Data.events[0].weekdays.SequenceEqual(new[]{4}),"scene event editor saves Thursday meeting");
-        work.NewRule();work.SaveRule();
+        work.NewRule();work.SaveEvent();
         Check(session.Data.rules.Count==1&&session.Data.rules[0].beforeMinutes==90,"scene shift alarm editor saves 90-minute rule");
         Check(RecurrenceEngine.Resolve(session.Data,new DateTime(2026,7,2),new DateTime(2026,7,2)).Any(x=>x.isEvent),"saved scene meeting resolves independently");
+        EventEditorChecks(session,work);
         foreach(var b in Object.FindObjectsByType<Button>(FindObjectsInactive.Include,FindObjectsSortMode.None))for(int i=0;i<b.onClick.GetPersistentEventCount();i++)Check(b.onClick.GetPersistentTarget(i)!=null&&!string.IsNullOrEmpty(b.onClick.GetPersistentMethodName(i)),"button wiring: "+b.name);
         Check(!Object.FindObjectsByType<Text>(FindObjectsInactive.Include,FindObjectsSortMode.None).Any(t=>t.text.Contains("11:29")),"fake system status removed");
         RefinementChecks(session,cal,work);
         foreach(var size in new[]{new Vector2Int(360,640),new Vector2Int(393,851),new Vector2Int(412,915)})Capture(size,cal,work);
         Debug.Log("ShiftCal focused checks passed: "+checks);
+    }
+    private static void EventEditorChecks(AppSession session,ScheduleWorkbench work)
+    {
+        var previous=session.Data;
+        var data=new ScheduleSave{account="editor-check-"+Guid.NewGuid().ToString("N"),group=Group()};
+        typeof(AppSession).GetProperty("Data").SetValue(session,data);
+        try
+        {
+            work.NewEvent("2026-10-08",2);
+            Check(work.contextSection.activeSelf&&work.linkedShift.options[work.linkedShift.value].text=="Day-12","Day Details date and stable shift preselected");
+            Check(work.eventDate.GetComponent<InputField>()==null&&work.eventTime.GetComponent<InputField>()==null,"date/time fields are buttons, never editable inputs");
+            Check(!work.intervalSection.activeSelf&&!work.endingSection.activeSelf&&!work.weekdaySection.activeSelf,"Once hides all recurrence detail");
+            for(int kind=1;kind<=3;kind++)
+            {
+                work.recurrence.value=kind;
+                Check(work.intervalSection.activeSelf&&work.weekdaySection.activeSelf==(kind==2),"conditional recurrence sections "+kind);
+            }
+            work.repeatEnding.value=1;Check(work.endingDateSection.activeSelf&&!work.countSection.activeSelf,"repeat ends on date shows picker only");
+            work.repeatEnding.value=2;Check(!work.endingDateSection.activeSelf&&work.countSection.activeSelf,"repeat count shows count only");
+            var picker=Object.FindFirstObjectByType<UnityPickerDialog>(FindObjectsInactive.Include);
+            work.eventDate.Open();string old=work.eventDate.value;
+            Check(PickerCoordinator.IsOpen&&picker.gameObject.activeSelf&&picker.year.value==26&&picker.month.value==9&&picker.day.value==7,"Editor date picker initializes current selection");
+            work.eventTime.Open();Check(picker.dateSection.activeSelf,"second picker cannot overlap");picker.Cancel();Check(work.eventDate.value==old&&!PickerCoordinator.IsOpen,"cancel preserves selected date");
+            work.eventDate.Open();picker.day.value=8;picker.Accept();Check(work.eventDate.value=="2026-10-09"&&work.weekdays[5].isOn,"date OK updates date key and default weekday");
+            work.eventTime.Set("04:00");work.eventTime.Open();Check(picker.hour.value==4&&picker.minute.value==0,"Editor time picker initializes hours/minutes");picker.minute.value=15;picker.Accept();Check(work.eventTime.value=="04:15","time OK serializes valid 24-hour time");
+            work.dayContextChoice.value=1;work.eventFields[0].text="Wake Up";work.beforeShift.Set(90);work.SaveEvent();
+            Check(data.events.Count==0&&data.rules.Count==1&&data.rules[0].shiftType==2&&data.rules[0].beforeMinutes==90,"shift event creates exactly one authoritative rule");
+            var rule=data.rules[0];var date=DateKeyUtility.FromDateKey("2026-10-09");
+            data.overrides.Add(new DayOverrideData{dateKey="2026-10-09",shiftType=2});
+            var occurrence=RecurrenceEngine.ShiftDates(data,date,date).Single();
+            Check(occurrence.at==RecurrenceEngine.Instant(date,"04:00","device")&&occurrence.calendarDateKey=="2026-10-09","relative rule anchored to resolved shift date");
+            rule.timingMode=ShiftTimingMode.FixedTime;rule.fixedTime="03:45";rule.calendarOnly=true;rule.audible=false;
+            var info=DayInformation.Resolve(data,date,date)["2026-10-09"];
+            Check(info.events.Count==1&&info.alarms.Count==0,"Alarm OFF rule visible once without any notification indicator");
+            Check(info.events[0].at==RecurrenceEngine.Instant(date,"03:45","device"),"fixed clock time matches qualifying shift date");
+            work.LoadRule(rule,"2026-10-09");Check(!work.advancedButton.activeSelf&&!work.eventAlarm.interactable,"single shift occurrence exposes delivery controls only");
+            data.overrides[0].shiftType=1;Check(!RecurrenceEngine.ShiftDates(data,date,date).Any(),"OFF removes linked date");
+            data.overrides[0].shiftType=2;Check(RecurrenceEngine.ShiftDates(data,date,date).Count==1,"restoring shift restores qualifying date");
+            data.group.shiftTypes[1].name="Renamed";Check(RecurrenceEngine.ShiftDates(data,date,date).Single().id==occurrence.id,"rename preserves occurrence identity");
+            var legacy=new EventSeries{title="Legacy reminder",dateKey="2026-10-08",startTime="04:00",endTime="05:00",zone="America/Chicago",alarm=false,reminder=true,reminderMinutes=0,sound="notification",vibration=false,snoozeMinutes=7,advanceMinutes=25};data.events.Add(legacy);
+            work.EditEvent(legacy.id,legacy.dateKey);work.eventFields.Find(f=>f.name=="notes").text="Saved notes";work.SaveEvent();
+            var saved=data.events.Single();
+            Check(saved.id==legacy.id&&saved.zone==legacy.zone&&saved.endTime==legacy.endTime&&saved.advanceMinutes==25,"saving compact form preserves hidden legacy fields and ID");
+            Check(!saved.alarm&&saved.reminder&&saved.reminderMinutes==0&&saved.sound=="notification"&&!saved.vibration&&saved.snoozeMinutes==7&&saved.notes=="Saved notes","reminder-only and explicit alarm overrides survive saving");
+            saved.sound="legacy-device-sound";work.EditEvent(saved.id,saved.dateKey);work.SaveEvent();Check(data.events.Single().sound=="legacy-device-sound","unchanged legacy sound value survives compact edit");
+            var restored=JsonUtility.FromJson<ShiftAlarmRule>("{\"id\":\"old\",\"shiftType\":2,\"beforeMinutes\":90}");
+            Check(restored.timingMode==ShiftTimingMode.BeforeStart&&!restored.calendarOnly&&!restored.useDefaultAlarmSettings,"missing model fields preserve old shift-rule semantics");
+            FirestoreService.Apply(data,"rule/"+rule.id,JsonUtility.ToJson(rule),false);
+            Check(data.rules.Single().timingMode==ShiftTimingMode.FixedTime&&data.rules.Single().calendarOnly,"new rule fields survive Firestore record parsing");
+            var monthly=new EventSeries{title="Month end",dateKey="2026-01-31",startTime="04:00",zone="UTC",endTime="05:00",recurrence=RecurrenceKind.Monthly,count=5};data.events.Add(monthly);
+            var replacement=new EventSeries{title="Changed occurrence",dateKey="2026-02-28",startTime="06:00",zone="America/Chicago"};
+            data.exceptions.Add(new EventException{id="changed",seriesId=monthly.id,originalDate="2026-02-28",replacement=replacement});
+            data.exceptions.Add(new EventException{id="skip",seriesId=monthly.id,originalDate="2026-03-31",cancelled=true});
+            work.EditEvent(monthly.id,"2026-02-28");work.editScope.value=2;work.SaveEvent();
+            var edited=data.events.Find(e=>e.id==monthly.id);
+            Check(edited.recurrence==RecurrenceKind.Monthly&&edited.count==5&&edited.dateKey=="2026-01-31"&&edited.zone=="UTC"&&edited.endTime=="05:00","exception-to-series edit restores cadence and preserves series metadata");
+            Check(data.exceptions.Any(e=>e.id=="skip"&&e.cancelled)&&data.exceptions.Any(e=>e.id=="changed"),"entire-series edit preserves skipped and replacement exceptions");
+        }
+        finally {work.Hide();typeof(AppSession).GetProperty("Data").SetValue(session,previous);}
     }
     private static void RefinementChecks(AppSession session,CalendarController cal,ScheduleWorkbench work)
     {
@@ -137,19 +197,20 @@ public static class ShiftCalChecks
         Check(settings.editor.HasChanges&&JsonUtility.ToJson(definition)==before,"shift editor stages changes until Save");settings.editor.gameObject.SetActive(false);
         settings.editor.Show(settings,null);settings.editor.nameInput.text="Custom OFF";settings.editor.Save();
         var custom=session.CurrentGroup.shiftTypes.Last();Check(custom.id>=100&&custom.hours==0&&string.IsNullOrEmpty(custom.startTime),"shift editor saves intentional untimed custom shift");
-        settings.editor.Show(settings,custom);settings.editor.startInput.text="5:30 PM";settings.editor.endInput.text="5:30 AM";settings.editor.Save();Check(custom.hours==12,"shift editor saves overnight hours");
+        settings.editor.Show(settings,custom);settings.editor.startPicker.Set("5:30 PM");settings.editor.endPicker.Set("5:30 AM");settings.editor.Save();Check(custom.hours==12,"shift editor saves overnight hours");
+        settings.editor.Show(settings,custom);settings.editor.ClearTimes();settings.editor.Save();Check(custom.hours==0&&string.IsNullOrEmpty(custom.startTime)&&string.IsNullOrEmpty(custom.endTime),"clear shift times preserves intentional untimed shifts on every platform");
         session.SetShift("2026-07-05",custom.id);Check(!session.CanDeleteShift(custom.id,out _),"custom shift referenced by date cannot be deleted");session.CalendarOverrides.Remove("2026-07-05");session.CurrentGroup.shiftTypes.Remove(custom);
         foreach(int id in new[]{0,3,4,5,6,7})session.CurrentGroup.shiftTypes.Add(new ShiftTypeDefinitionData{id=id,name=ShiftStyleUtility.GetName(id,null),colorHex=ShiftStyleUtility.GetColorHex(id,null)});
         string future=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(1));
         var e=session.Data.events[0];e.dateKey=future;e.alarm=true;e.reminder=true;e.weekdays=new List<int>{(int)DateTime.Today.AddDays(1).DayOfWeek};
         session.Data.overrides=new List<DayOverrideData>(session.CalendarOverrides.Values);
         var info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
-        Check(info[future].events.Count==1&&info[future].alarms.Count(o=>o.isEvent)==2,"event counted once while alarm and reminder remain separate");
+        Check(info[future].events.Count(o=>o.isEvent)==1&&info[future].alarms.Count(o=>o.isEvent)==2,"event counted once while alarm and reminder remain separate");
         session.Data.mutedEvents.Add(e.id);info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
-        Check(info[future].events.Count==1&&info[future].alarms.Count(o=>o.isEvent)==0,"paused/view-only event has no alarm indicator");session.Data.mutedEvents.Clear();
+        Check(info[future].events.Count(o=>o.isEvent)==1&&info[future].alarms.Count(o=>o.isEvent)==0,"paused/view-only event has no alarm indicator");session.Data.mutedEvents.Clear();
         var replacement=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(e));replacement.dateKey=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(2));
         session.Data.exceptions.Add(new EventException{seriesId=e.id,originalDate=future,replacement=replacement});info=DayInformation.Resolve(session.Data,DateTime.Today,DateTime.Today.AddDays(14));
-        Check(info[replacement.dateKey].events.Count==1&&info[replacement.dateKey].alarms.Count(o=>o.isEvent)==2,"moved exception uses intended calendar date");session.Data.exceptions.Clear();
+        Check(info[replacement.dateKey].events.Count(o=>o.isEvent)==1&&info[replacement.dateKey].alarms.Count(o=>o.isEvent)==2,"moved exception uses intended calendar date");session.Data.exceptions.Clear();
         var nav=Object.FindFirstObjectByType<AppNavigation>();typeof(AppNavigation).GetMethod("Awake",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(nav,null);
         nav.ShowLogin();nav.ShowCalendar();nav.ShowSettings();nav.ShowManageShifts();
         Check(nav.CurrentScreen.name=="Manage Shifts Screen","Manage Shifts opens from Settings");nav.Back();Check(nav.CurrentScreen.name=="Settings Screen","Manage Shifts Back returns to Settings");
@@ -247,17 +308,29 @@ public static class ShiftCalChecks
         var date=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(1));
         AppSession.Instance.UpdateDayDetails(date,"Bring the reports.\nMeet at the north entrance.\nConfirm handover before leaving.","Abram");
         foreach(var theme in new[]{ThemeManager.Theme.MidnightGraphite,ThemeManager.Theme.DeepTeal,ThemeManager.Theme.SoftDaylight})
-        foreach(var screen in new[]{"Login Screen","Calendar Screen","Edit-Calendar","Settings Screen","Manage-Shifts","Account","Events","Upcoming","Event-Editor","Alarm-Editor","Shift-Editor","Day-Preview","Day-Editor","Repeat","Shift-Picker","Bulk-Picker","Confirmation"})
+        foreach(var screen in new[]{"Login Screen","Calendar Screen","Edit-Calendar","Settings Screen","Manage-Shifts","Account","Events","Upcoming","Event-Editor","Daily-Event-Editor","Weekly-Event-Editor","Monthly-Event-Editor","Shift-Fixed-Event-Editor","Shift-Relative-Event-Editor","Date-Picker","Time-Picker","Alarm-Preferences","Alarm-Editor","Shift-Editor","Day-Preview","Day-Editor","Repeat","Shift-Picker","Bulk-Picker","Confirmation"})
         {
-            work.Hide();settings.editor.gameObject.SetActive(false);popup.Hide();cal.preview.Hide();cal.SetEditing(false);
-            var visible=screen=="Manage-Shifts"||screen=="Shift-Editor"?"Manage Shifts Screen":screen=="Settings Screen"||screen=="Account"?"Settings Screen":screen=="Login Screen"?screen:"Calendar Screen";
+            Object.FindFirstObjectByType<UnityPickerDialog>(FindObjectsInactive.Include)?.Cancel();work.Hide();settings.editor.gameObject.SetActive(false);popup.Hide();cal.preview.Hide();cal.SetEditing(false);
+            var visible=screen=="Manage-Shifts"||screen=="Shift-Editor"?"Manage Shifts Screen":screen=="Settings Screen"||screen=="Account"||screen=="Alarm-Preferences"?"Settings Screen":screen=="Login Screen"?screen:"Calendar Screen";
             root.Find("Account Popup").gameObject.SetActive(false);
             foreach(Transform child in root)if(child.name.EndsWith("Screen"))child.gameObject.SetActive(child.name==visible);
             cal.currentMonth=new DateTime(DateTime.Today.Year,DateTime.Today.Month,1);cal.Refresh();
             if(visible=="Manage Shifts Screen")settings.Refresh();
             if(screen=="Account")root.Find("Account Popup").gameObject.SetActive(true);
             if(screen=="Events"||screen=="Upcoming") {work.ShowAgenda();if(screen=="Upcoming"&&!work.upcomingSection.activeSelf)work.ToggleUpcoming();if(screen=="Events"&&work.upcomingSection.activeSelf)work.ToggleUpcoming();}
-            if(screen=="Event-Editor")work.NewEvent(date);
+            if(screen.EndsWith("Event-Editor")||screen=="Date-Picker"||screen=="Time-Picker")
+            {
+                work.NewEvent(date);work.eventFields[0].text="Wake Up";work.eventTime.Set("04:00");
+                if(screen.StartsWith("Daily"))work.recurrence.value=1;
+                if(screen.StartsWith("Weekly"))work.recurrence.value=2;
+                if(screen.StartsWith("Monthly")){work.recurrence.value=3;work.repeatEnding.value=1;}
+                if(screen.StartsWith("Shift")){work.NewRule();if(screen.StartsWith("Shift-Fixed"))work.timingMode.value=1;}
+                if(screen=="Date-Picker")work.eventDate.Open();if(screen=="Time-Picker")work.eventTime.Open();
+            }
+            if(screen=="Alarm-Preferences")
+            {
+                var scroll=root.Find("Settings Screen").GetComponentInChildren<ScrollRect>();Canvas.ForceUpdateCanvases();scroll.verticalNormalizedPosition=.7f;
+            }
             if(screen=="Alarm-Editor")work.NewRule();
             if(screen=="Shift-Editor")settings.editor.Show(settings,AppSession.Instance.CurrentGroup.shiftTypes[1]);
             if(screen=="Day-Preview"||screen=="Day-Editor") {cal.TapDay(date);if(screen=="Day-Editor")cal.preview.OpenDetails();}
@@ -266,15 +339,20 @@ public static class ShiftCalChecks
             var confirmation=Object.FindFirstObjectByType<ConfirmationDialog>(FindObjectsInactive.Include);if(screen=="Confirmation")confirmation.Show("Discard unsaved changes?",()=>{});
             ThemeManager.Apply(theme);camera.backgroundColor=ThemeManager.Token(ThemeManager.Role.Background);SettleLayout(cal);
             foreach(var toggle in Object.FindObjectsByType<Toggle>(FindObjectsSortMode.None))
-                if(toggle.gameObject.activeInHierarchy)Check(((RectTransform)toggle.transform).rect.width<=100,"compact toggle fits "+screen+" / "+toggle.name);
+                if(toggle.gameObject.activeInHierarchy)Check(((RectTransform)toggle.transform).rect.width<=(toggle.name.StartsWith("Weekday ")?150:100),"compact toggle fits "+screen+" / "+toggle.name);
             if(screen.EndsWith("Editor"))
             {
-                var panel=screen=="Event-Editor"?work.eventPanel:screen=="Alarm-Editor"?work.rulePanel:screen=="Shift-Editor"?settings.editor.gameObject:popup.gameObject;
+                var panel=screen=="Event-Editor"?work.eventPanel:screen=="Alarm-Editor"?work.eventPanel:screen=="Shift-Editor"?settings.editor.gameObject:popup.gameObject;
                 var footer=panel.GetComponentsInChildren<RectTransform>().First(x=>x.name=="Editor actions");var corners=new Vector3[4];footer.GetWorldCorners(corners);
                 Check(corners.All(p=>{var point=RectTransformUtility.WorldToScreenPoint(camera,p);return point.x>=-1&&point.x<=size.x+1&&point.y>=-1&&point.y<=size.y+1;}),"editor footer fits "+screen+" / "+size+" / "+theme);
                 var scroll=panel.GetComponentInChildren<ScrollRect>();scroll.verticalNormalizedPosition=0;Canvas.ForceUpdateCanvases();
                 Check(scroll.content.rect.height>=0&&scroll.viewport.rect.height>0,"editor scroll accessible "+screen+" / "+size);
                 scroll.verticalNormalizedPosition=1;
+            }
+            if(screen=="Weekly-Event-Editor")
+            {
+                var chipRects=work.weekdays.Select(w=>(RectTransform)w.transform).ToArray();
+                Check(chipRects.All(r=>r.rect.width>=90&&r.rect.height>=100),"seven selectable weekday chips have full touch targets "+size);
             }
             if(screen=="Shift-Picker"||screen=="Bulk-Picker")
             {

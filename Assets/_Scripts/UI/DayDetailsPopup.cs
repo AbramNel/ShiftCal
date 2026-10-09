@@ -1,4 +1,5 @@
 using ShiftCal.Core;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 namespace ShiftCal.UI
@@ -23,7 +24,12 @@ namespace ShiftCal.UI
             timeLabel.text = string.IsNullOrWhiteSpace(day.startTime) ? "No scheduled hours" : day.startTime + " – " + day.endTime;
             hoursLabel.text = ShiftTimeUtility.FormatHours(day.hours); colorSwatch.color = ShiftStyleUtility.ToColor(day.shiftColorHex);
             if (info == null) { var data = DayInformation.Resolve(App.AppSession.Instance.Data, day.date, day.date); info = data.TryGetValue(day.dateKey, out var value) ? value : new DayInformation(); }
-            if (eventsLabel != null) { eventsLabel.text = string.Join("\n", info.events.ConvertAll(o => o.title + " • " + DayInformation.Time(o))) + "\n" + string.Join("\n", info.alarms.ConvertAll(o => o.title + " • " + DayInformation.Time(o))); eventsLabel.gameObject.SetActive(info.events.Count + info.alarms.Count > 0); }
+            if (eventsLabel != null)
+            {
+                eventsLabel.text = string.Join("\n\n", info.events.Select(DayInformation.EventLine)
+                    .Concat(info.alarms.Where(o=>o.isEvent).Select(o=>o.title+" • "+DayInformation.Time(o))));
+                eventsLabel.gameObject.SetActive(info.events.Count + info.alarms.Count > 0);
+            }
             panel.SetActive(true); panel.transform.SetAsLastSibling();
             var modal = panel.GetComponent<ModalPanel>(); modal.HasChanges = () => HasChanges;
         }
@@ -58,7 +64,7 @@ namespace ShiftCal.UI
         public void AddEvent()
         {
             if (selected == null) return;
-            System.Action open = () => { Hide(); Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).NewEvent(selected.dateKey); };
+            System.Action open = () => { Hide(); Object.FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).NewEvent(selected.dateKey, selected.ResolvedShift); };
             if (HasChanges) AppNavigation.Instance.Confirm("Discard unsaved notes before adding an event?", open); else open();
         }
     }

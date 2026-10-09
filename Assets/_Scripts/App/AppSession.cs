@@ -27,6 +27,7 @@ namespace ShiftCal.App
             if (CurrentGroup == null)
                 CurrentGroup = CreateDefaultGroup();
 
+            DeviceAlarmPreferences.Publish();
             SwitchAccount(PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3","local"),PlayerPrefs.HasKey("ShiftCal.ActiveAccount.v3"));
         }
 
