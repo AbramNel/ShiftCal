@@ -2,6 +2,8 @@
 
 Unity 6000.3.0f1 Android portrait calendar combining a rotating work schedule with shared family activities. All ongoing work belongs on **main**.
 
+Continuing on another PC? Start with [HANDOFF.md](HANDOFF.md) for the current goal, completed work, remaining checks and setup steps.
+
 Open `Assets/Calendar.unity`. The scene, row prefabs, and sprite assets are saved and wired. The permanent scene builder reproduces them; rebuilding replaces manual scene edits.
 
 Tap a date for its compact preview and day details. Add a titled activity or note, choose one of 20 semantic icons, assign responsibility and participants, and optionally add a time, duration, recurrence, and a device alarm. Recurring edits support one occurrence, future occurrences, or the series. Family profiles have stable IDs, colors, optional account linkage, and explicit work-rotation ownership.
