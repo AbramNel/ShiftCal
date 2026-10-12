@@ -7,7 +7,7 @@ namespace ShiftCal.UI
 {
     public class DurationChoice : MonoBehaviour
     {
-        public Dropdown choice;
+        public SelectionField choice;
         public InputField custom;
         public int[] minutes;
         public int maximum = 10080;

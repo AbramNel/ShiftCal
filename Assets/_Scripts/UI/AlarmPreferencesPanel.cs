@@ -9,7 +9,7 @@ namespace ShiftCal.UI
     {
         public Toggle upcoming, vibration;
         public DurationChoice notice, snooze;
-        public Dropdown sound;
+        public SelectionField sound;
         public Text message;
         public GameObject noticeSection;
         private bool loading, hooked;

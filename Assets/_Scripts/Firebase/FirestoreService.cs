@@ -18,6 +18,9 @@ namespace ShiftCal.Firebase
         public readonly List<string> MemberLabels=new List<string>();
         public bool CanManageProfiles => AppSession.Instance.CurrentGroup.groupId.StartsWith("local-") || !string.IsNullOrEmpty(AppSession.Instance.CurrentGroup.ownerUid) && AppSession.Instance.CurrentGroup.ownerUid==AppSession.Instance.Data.account;
         private bool uploading;
+        public bool IsUploading=>uploading;
+        public bool HasServerAcknowledgement { get; private set; }
+        public bool IsCached { get; private set; }
         private string uploadKey,uploadJson;
         private bool uploadDeleted;
         private long uploadRevision;
@@ -57,6 +60,7 @@ namespace ShiftCal.Firebase
         public void StopListening()
         {
             generation++; uploading=false;uploadKey=null;MemberIds.Clear();MemberLabels.Clear();
+            HasServerAcknowledgement=false;IsCached=false;
 #if SHIFT_CAL_USE_FIREBASE
             foreach (var l in listeners) l.Stop(); listeners.Clear();
 #endif
@@ -79,6 +83,7 @@ namespace ShiftCal.Firebase
                             Merge((string)map["key"],(string)map["json"],(bool)map["deleted"],Convert.ToInt64(map["revision"]));
                         }
                         AppSession.Instance.ApplyRemote();
+                        IsCached=snapshot.Metadata.IsFromCache;HasServerAcknowledgement=!IsCached;
                         Status=AppSession.Instance.Data.records.Any(r=>r.conflict)?"Conflicting edits. Choose Keep mine or Use remote in Options.":snapshot.Metadata.IsFromCache?"Offline / cached calendar":"Synced";
                         Flush();
                     } catch(Exception ex) { AppSession.Instance.RestoreSnapshot(previous);Status="Sync error; previous calendar retained: "+ex.Message; }
@@ -147,7 +152,7 @@ namespace ShiftCal.Firebase
                 if(t.IsFaulted||t.IsCanceled){Status="Offline or sync failed. Changes saved locally. Retry: "+t.Exception?.GetBaseException().Message;return;}
                 if(!t.Result){Status="Remote edit conflict. Refreshing.";StartListening();return;}
                 r.revision=Math.Max(r.revision,rev+1);if(r.json==json&&r.deleted==deleted)r.pending=false;
-                ScheduleStorage.Write(AppSession.Instance.Data);Status="Synced";Flush();
+                ScheduleStorage.Write(AppSession.Instance.Data);HasServerAcknowledgement=true;IsCached=false;Status="Synced";Flush();
             });
 #endif
         }

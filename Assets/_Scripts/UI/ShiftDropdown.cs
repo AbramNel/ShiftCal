@@ -4,20 +4,12 @@ using UnityEngine.UI;
 
 namespace ShiftCal.UI
 {
-    public class ShiftDropdown : Dropdown
+    public class ShiftDropdown : SelectionField
     {
         public List<Color> shiftColors = new List<Color>();
-        private int itemIndex;
-        protected override GameObject CreateDropdownList(GameObject template)
+        public override List<SelectionItem> Items
         {
-            itemIndex = 0; return base.CreateDropdownList(template);
-        }
-        protected override DropdownItem CreateItem(DropdownItem template)
-        {
-            var item = base.CreateItem(template);
-            var swatch = item.transform.Find("Shift option color")?.GetComponent<Image>();
-            if (swatch != null && itemIndex < shiftColors.Count) swatch.color = shiftColors[itemIndex];
-            itemIndex++; return item;
+            get { for(int i=0;i<options.Count&&i<shiftColors.Count;i++)options[i].color="#"+ColorUtility.ToHtmlStringRGB(shiftColors[i]);return options; }
         }
     }
 }

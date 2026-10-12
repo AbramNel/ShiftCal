@@ -100,9 +100,10 @@ public static partial class ShiftCalSceneBuilder
         var cancel=Command(actions.transform,"Cancel",dialog.Cancel);var accept=Command(actions.transform,"Confirm",dialog.Accept);AddLayoutElement(cancel.gameObject,0,-1,1);AddLayoutElement(accept.gameObject,0,-1,1);
         overlay.SetActive(false);return dialog;
     }
-    private static Transform Expandable(Transform parent,string title)
+    private static Transform Expandable(Transform parent,string title)=>Expandable(parent,title,out _);
+    private static Transform Expandable(Transform parent,string title,out ExpandableSection section)
     {
-        var button=Command(parent,title+"  ▾",null);var section=button.gameObject.AddComponent<ExpandableSection>();
+        var button=Command(parent,title+"  ▾",null);section=button.gameObject.AddComponent<ExpandableSection>();
         var content=CreateVerticalGroup(title+" content",parent,16,0,0,0,0);content.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         section.content=content;UnityEventTools.AddPersistentListener(button.onClick,section.Toggle);content.SetActive(false);return content.transform;
     }

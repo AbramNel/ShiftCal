@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ShiftCal.UI;
 using UnityEditor;
 using UnityEditor.Events;
@@ -10,9 +11,17 @@ public static partial class ShiftCalSceneBuilder
 {
     static void NormalizeSavedYaml()
     {
+        AssetDatabase.ReleaseCachedFileHandles();
         foreach(string path in System.IO.Directory.GetFiles(PrefabFolder,"*.prefab"))TrimYaml(path);TrimYaml(ScenePath);
     }
-    static void TrimYaml(string path){var lines=System.IO.File.ReadAllLines(path);for(int i=0;i<lines.Length;i++)lines[i]=lines[i].TrimEnd();System.IO.File.WriteAllLines(path,lines,new System.Text.UTF8Encoding(false));}
+    static void TrimYaml(string path)
+    {
+        var lines=System.IO.File.ReadAllLines(path);for(int i=0;i<lines.Length;i++)lines[i]=lines[i].TrimEnd();
+        // Windows may retain a mapped scene while the importer is refreshing it.
+        // Whitespace normalization must never invalidate a successfully saved asset.
+        try{System.IO.File.WriteAllLines(path,lines,new System.Text.UTF8Encoding(false));}
+        catch(System.IO.IOException){Debug.LogWarning("Saved asset remains valid; YAML whitespace cleanup deferred for "+path);}
+    }
     private static void CreateFamilyUI(Transform root,GameObject settings,GameObject calendarScreen)
     {
         BuildActivityIcons();
@@ -20,8 +29,8 @@ public static partial class ShiftCalSceneBuilder
         var gesture=calendarScreen.AddComponent<CalendarGestureController>();gesture.calendar=work.calendar;work.calendar.gesture=gesture;
         var editor=root.gameObject.AddComponent<ActivityEditor>();work.editor=editor;editor.workbench=work;
         work.rowPrefab=BuildFamilyRow();
-        work.agendaPanel=CreateScreen("Family Agenda",root);var agenda=ScreenContent(work.agendaPanel,"Next seven days");BackButton(work.agendaPanel);
-        work.agendaFilter=Choice(agenda,"Show activities",new[]{"Everyone"});Command(agenda,"Add activity / note",work.NewActivity);work.agendaContent=Section(agenda,"Seven day entries").transform;work.agendaPanel.SetActive(false);
+        work.agendaPanel=CreateScreen("Family Agenda",root);var agenda=ScreenContent(work.agendaPanel,"Upcoming — Next 7 Days");BackButton(work.agendaPanel);
+        work.agendaFilter=Choice(agenda,"Show activities",new[]{"Everyone"});Command(agenda,"Add activity / note",work.NewActivity);work.showAllDates=Check(agenda,"Show all dates",false,96);work.agendaContent=Section(agenda,"Seven day entries").transform;work.agendaPanel.SetActive(false);
 
         var filterRow=CreateHorizontalGroup("Family filter",calendarScreen.transform,12,0,0,0,0);AnchorStretch(filterRow.GetComponent<RectTransform>(),0,1,1,1,24,-426,-24,-286);
         var filterContainer=Section(filterRow.transform,"Filter selection");AddLayoutElement(filterContainer,0,140,1);work.filter=Choice(filterContainer.transform,"Show activities",new[]{"Everyone"});Object.DestroyImmediate(filterContainer.transform.GetChild(0).gameObject);work.filter.transform.GetComponent<LayoutElement>().preferredHeight=132;var filterIcon=CreateImage("Filter sprite",work.filter.transform,Primary);filterIcon.sprite=NavigationIcon("filter");filterIcon.raycastTarget=false;AnchorStretch(filterIcon.rectTransform,0,.5f,0,.5f,16,-18,52,18);work.filter.captionText.rectTransform.offsetMin=new Vector2(64,8);
@@ -33,24 +42,28 @@ public static partial class ShiftCalSceneBuilder
         var dayContent=FindChild(dayPopup.transform,"Day Details Content");dayPopup.activityContent=Section(dayContent,"Day activities").transform;dayPopup.activityContent.SetSiblingIndex(4);
 
         editor.panel=CreateScreen("Activity Editor",root);editor.panel.GetComponent<Image>().raycastTarget=true;var form=ScreenContent(editor.panel,"Activity / note");EditorFooter(editor.panel,editor.Commit,editor.Cancel);FindChild(editor.panel.transform,"Save Event").GetComponentInChildren<Text>().text="Save activity";
-        editor.title=CompactField(form,"activityTitle","Title");editor.notes=CompactField(form,"activityNotes","Notes (optional)",true);
+        editor.heading=editor.panel.GetComponentsInChildren<Text>().First(x=>x.text=="Activity / note");editor.saveLabel=FindChild(editor.panel.transform,"Save Event").GetComponentInChildren<Text>();
+        editor.title=CompactField(form,"activityTitle","Title");
         var iconRow=CreateHorizontalGroup("Activity icon preview",form,20,0,0,0,0);AddLayoutElement(iconRow,-1,132);
         editor.preview=CreateImage("Activity preview",iconRow.transform,Primary);AddLayoutElement(editor.preview.gameObject,88,88);editor.preview.preserveAspect=true;
         editor.iconName=Body(iconRow.transform,"Activity",100);AddLayoutElement(editor.iconName.gameObject,0,-1,1);var pick=Command(iconRow.transform,"Choose icon",editor.Icons);AddLayoutElement(pick.gameObject,330,120);
-        editor.date=Picker(form,"Activity date",true);editor.allDay=Check(form,"All day",false,90);editor.timed=Check(form,"Timed",false,90);
+        editor.date=Picker(form,"Activity date",true);editor.timing=Choice(form,"When",new[]{"No time","Specific time","All day"});
         editor.timeSection=Section(form,"Activity timing");editor.time=Picker(editor.timeSection.transform,"Activity time",false,true);editor.duration=Duration(editor.timeSection.transform,"Duration",new[]{0,15,30,45,60,90,120},10080);editor.duration.minimum=0;
-        editor.assignee=Choice(form,"Assigned to",new[]{"Unassigned"});var assign=CreateHorizontalGroup("Assignment actions",form,16,0,0,0,0);AddLayoutElement(assign,-1,120);
-        foreach(var b in new[]{Command(assign.transform,"Assign to me",editor.Claim),Command(assign.transform,"Unassign",editor.Unassign)})AddLayoutElement(b.gameObject,0,120,1);
-        editor.participantContent=Expandable(form,"Participants");editor.participantPrefab=BuildParticipantRow();
+        editor.assignee=Choice(form,"Assigned to",new[]{"Unassigned"});AttachSelectionSwatch(editor.assignee);editor.profileRoute=Command(form,"Family profile settings",editor.Profiles);
         editor.recurrence=Choice(form,"Repeat",new[]{"Once","Daily","Weekly","Monthly"});
-        editor.repeatSection=Section(form,"Activity repeat settings");editor.interval=CompactField(editor.repeatSection.transform,"activityInterval","Every N days / weeks / months",false,true);
-        editor.weekdaySection=Section(editor.repeatSection.transform,"Activity weekdays");var weekdays=CreateHorizontalGroup("Activity weekday chips",editor.weekdaySection.transform,8,0,0,0,0);AddLayoutElement(weekdays,-1,104);editor.weekdays=new Toggle[7];
-        for(int i=0;i<7;i++){var button=Command(weekdays.transform,new[]{"S","M","T","W","T","F","S"}[i],null);AddLayoutElement(button.gameObject,0,104,1);var chip=button.gameObject;Object.DestroyImmediate(button);var toggle=chip.AddComponent<Toggle>();toggle.targetGraphic=chip.GetComponent<Image>();var outline=CreateImage("Selected weekday",toggle.transform,Primary);outline.sprite=SelectionFrame;outline.type=Image.Type.Sliced;outline.raycastTarget=false;Stretch(outline.rectTransform);toggle.graphic=outline;toggle.isOn=false;editor.weekdays[i]=toggle;}
-        editor.ending=Choice(editor.repeatSection.transform,"Ends",new[]{"Never","On date","After N occurrences"});editor.endingDateSection=Section(editor.repeatSection.transform,"Activity end date");editor.endingDate=Picker(editor.endingDateSection.transform,"Activity until",true);editor.countSection=Section(editor.repeatSection.transform,"Activity count");editor.count=CompactField(editor.countSection.transform,"activityCount","Occurrences",false,true);
-        editor.alarmSection=Section(form,"Device-only activity alarm");Body(editor.alarmSection.transform,"Alarm settings apply only to this device.",80);editor.alarm=Check(editor.alarmSection.transform,"Alarm?",false,96);editor.activeAlarm=Check(editor.alarmSection.transform,"Enabled on this device",true,96);editor.reminder=Duration(editor.alarmSection.transform,"Remind before",new[]{0,5,10,15,30,60},10080);editor.reminder.minimum=0;
+        editor.recurrence.options[0].description="Only this date";editor.recurrence.options[1].description="Every day or every N days";editor.recurrence.options[2].description="Choose one or more weekdays";editor.recurrence.options[3].description="Every month or every N months";
+        foreach(var item in editor.recurrence.options)item.icon=NavigationIcon("repeat-cycle");
+        editor.repeatSection=Section(form,"Activity repeat settings");editor.interval=Stepper(editor.repeatSection.transform,"activityInterval","Repeat every day(s)");editor.intervalLabel=editor.repeatSection.transform.GetComponentInChildren<Text>();
+        editor.weekdaySection=Section(editor.repeatSection.transform,"Activity weekdays");var weekdays=CreateHorizontalGroup("Activity weekday chips",editor.weekdaySection.transform,8,0,0,0,0);AddLayoutElement(weekdays,-1,132);editor.weekdays=new Toggle[7];
+        for(int i=0;i<7;i++){var button=Command(weekdays.transform,new[]{"S","M","T","W","T","F","S"}[i],null);AddLayoutElement(button.gameObject,0,132,1);var chip=button.gameObject;Object.DestroyImmediate(button);var toggle=chip.AddComponent<Toggle>();toggle.targetGraphic=chip.GetComponent<Image>();var outline=CreateImage("Selected weekday",toggle.transform,Primary);outline.sprite=SelectionFrame;outline.type=Image.Type.Sliced;outline.raycastTarget=false;Stretch(outline.rectTransform);toggle.graphic=outline;toggle.isOn=false;editor.weekdays[i]=toggle;}
+        var endings=Expandable(form,"Recurrence ending",out editor.endingExpansion);editor.ending=Choice(endings,"Ends",new[]{"Never","On date","After N occurrences"});editor.endingDateSection=Section(endings,"Activity end date");editor.endingDate=Picker(editor.endingDateSection.transform,"Activity until",true);editor.countSection=Section(endings,"Activity count");editor.count=Stepper(editor.countSection.transform,"activityCount","Occurrences",10000);
+        editor.repeatPreview=Body(form,"",-1);editor.repeatPreview.fontSize=30;editor.repeatPreview.color=TextMuted;
+        editor.notes=CompactField(form,"activityNotes","Notes (optional)",true);editor.notes.GetComponent<LayoutElement>().preferredHeight=160;Command(form,"Expand / compact notes",editor.ExpandNotes);
+        var people=Expandable(form,"Participants");editor.participants=Choice(people,"Participants",new[]{"Select people"});editor.participants.multiple=true;editor.participants.emptyLabel="No participants";
+        editor.alarmSection=Section(form,"Personal reminders");var alarms=Expandable(editor.alarmSection.transform,"Personal reminders",out editor.alarmExpansion);Body(alarms,"Alarm only on this device.",60);editor.alarm=Check(alarms,"Alarm?",false,96);editor.activeAlarm=Check(alarms,"Enabled on this device",true,96);editor.reminder=Duration(alarms,"Remind before",new[]{0,5,10,15,30,60},10080);editor.reminder.minimum=0;
         editor.scopeSection=Section(form,"Activity edit scope");editor.scope=Choice(editor.scopeSection.transform,"Apply changes to",new[]{"This occurrence","This and future occurrences","Entire series"});editor.deleteButton=Command(form,"Delete / cancel activity",editor.Delete).gameObject;
-        editor.warning=Body(form,"",180);editor.warning.fontSize=30;editor.message=Body(form,"",120);editor.message.color=Danger;
-        var templateSection=Expandable(form,"Save as template");editor.templateName=CompactField(templateSection,"templateName","Template name");editor.sharedTemplate=Check(templateSection,"Share template with this calendar",false,96);Command(templateSection,"Save template",editor.SaveTemplate);
+        editor.warning=Body(form,"",-1);editor.warning.fontSize=30;editor.warning.color=TextMuted;editor.message=Body(form,"",-1);editor.message.fontSize=30;editor.message.color=Danger;
+        var templateSection=Expandable(form,"Activity templates",out editor.templateExpansion);Command(templateSection,"Choose a saved template",editor.ChooseTemplate);editor.templateName=CompactField(templateSection,"templateName","Template name");editor.sharedTemplate=Check(templateSection,"Share template with this calendar",false,96);Command(templateSection,"Save template",editor.SaveTemplate);
         editor.panel.SetActive(false);
         editor.iconPanel=CreateScreen("Activity Icon Picker",root);editor.iconPanel.GetComponent<Image>().raycastTarget=true;editor.iconPanel.AddComponent<ModalPanel>().dismissOutside=false;CreateTopBar(editor.iconPanel.transform,"Choose activity icon");var iconContent=CreateScrollContent("Icon picker",editor.iconPanel.transform,20,24,24,20,20,out var iconScroll);AnchorStretch(iconScroll.GetComponent<RectTransform>(),0,0,1,1,0,140,0,-174);
         Object.DestroyImmediate(iconContent.GetComponent<VerticalLayoutGroup>());var iconGrid=iconContent.gameObject.AddComponent<GridLayoutGroup>();iconGrid.constraint=GridLayoutGroup.Constraint.FixedColumnCount;iconGrid.constraintCount=4;iconGrid.cellSize=new Vector2(238,242);iconGrid.spacing=new Vector2(12,12);
@@ -59,9 +72,11 @@ public static partial class ShiftCalSceneBuilder
 
         work.detailsPanel=CreateScreen("Activity Details",root);work.detailsPanel.GetComponent<Image>().raycastTarget=true;work.detailsPanel.AddComponent<ModalPanel>().dismissOutside=false;var details=ScreenContent(work.detailsPanel,"Activity details");var detailClose=Command(work.detailsPanel.transform,"Close",work.CloseDetails);AnchorStretch(detailClose.GetComponent<RectTransform>(),1,1,1,1,-190,-146,-24,-12);
         work.detailsIcon=CreateImage("Activity detail icon",details,Primary);AddLayoutElement(work.detailsIcon.gameObject,100,100);work.detailsIcon.preserveAspect=true;work.detailsTitle=Body(details,"Activity",100);work.detailsTitle.fontStyle=FontStyle.Bold;work.detailsBody=Body(details,"Details",320);work.detailsBody.GetComponent<LayoutElement>().preferredHeight=-1;
-        work.detailScope=Choice(details,"Assignment / cancellation scope",new[]{"This occurrence","This and future occurrences","Entire series"});Command(details,"Assign to me",work.Claim);Command(details,"Unassign",work.Unassign);Command(details,"Edit / change assignment / participants",work.Edit);Command(details,"Delete / cancel",work.CancelOccurrence);work.detailsMessage=Body(details,"",160);work.detailsPanel.SetActive(false);
+        work.assigned=Choice(details,"Assigned to",new[]{"Unassigned"});AttachSelectionSwatch(work.assigned);work.participants=Choice(details,"Participants",new[]{"No participants"});work.participants.multiple=true;work.participants.emptyLabel="No participants";
+        work.detailScope=StandaloneSelection(root,"Apply responsibility change",new[]{"This occurrence","This and future occurrences","Entire series"});Command(details,"Family profile settings",work.Profiles);Command(details,"Edit Activity",work.Edit);Command(details,"Delete / cancel",work.CancelOccurrence);work.detailsMessage=Body(details,"",-1);work.detailsMessage.fontSize=30;work.undo=Command(details,"Undo assignment",work.UndoAssignment);work.undo.gameObject.SetActive(false);BuildSaveStatus(details);work.detailsPanel.SetActive(false);
 
         var settingsContent=FindChild(settings.transform,"Settings Scroll Content");var familyCard=SettingsCard(settingsContent,"Family calendar");familyCard.SetSiblingIndex(2);Disclosure(familyCard,"Upcoming seven days",work.ShowAgenda);
+        BuildSaveStatus(settingsContent).SetSiblingIndex(0);
         BuildProfiles(root,familyCard);var templates=BuildTemplates(root,familyCard,editor);editor.templates=templates;BuildPlanner(root,familyCard,work);
         var addEvent=FindChild(root,"+ Add event").GetComponent<Button>();UnityEventTools.RemovePersistentListener(addEvent.onClick,0);UnityEventTools.AddPersistentListener(addEvent.onClick,work.NewActivity);addEvent.GetComponentInChildren<Text>().text="+ Activity";
         ReplaceNavigationGlyphs(root);BakeThemes(root);
@@ -75,33 +90,29 @@ public static partial class ShiftCalSceneBuilder
             var icon=CreateImage("Activity cell icon",badge.transform,TextDark);icon.raycastTarget=false;icon.preserveAspect=true;AnchorStretch(icon.rectTransform,0,0,1,1,5,5,-5,-5);cell.activityIcons[i]=icon;badge.SetActive(false);}
         cell.activityOverflow=CreateText("Activity overflow",root,"",25,TextDark,TextAnchor.MiddleRight,FontStyle.Bold);AnchorStretch(cell.activityOverflow.rectTransform,1,0,1,0,-38,7,-4,43);cell.activityOverflow.raycastTarget=false;
     }
-    static GameObject BuildParticipantRow()
-    {
-        string path=PrefabFolder+"/FamilyParticipant.prefab";var holder=CreateUiRoot("Participant builder");var toggle=Check(holder.transform,"Person",false,100);var row=toggle.transform.parent.gameObject;row.transform.SetParent(null);BakeThemes(row.transform);var prefab=PrefabUtility.SaveAsPrefabAsset(row,path);Object.DestroyImmediate(row);Object.DestroyImmediate(holder);return prefab;
-    }
     static FamilyActivityRow BuildFamilyRow()
     {
         var go=CreateHorizontalGroup("FamilyActivityRow",null,20,20,20,12,12);AddLayoutElement(go,-1,150);var bg=go.AddComponent<Image>();bg.sprite=Rounded;bg.type=Image.Type.Sliced;bg.color=CardSoft;
-        var row=go.AddComponent<FamilyActivityRow>();row.button=go.AddComponent<Button>();row.button.targetGraphic=bg;
+        var row=go.AddComponent<FamilyActivityRow>();row.button=go.AddComponent<Button>();row.button.targetGraphic=bg;go.GetComponent<LayoutElement>().preferredHeight=-1;go.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         var badge=CreatePanel("Activity badge",go.transform,Color.clear);AddLayoutElement(badge,92,92);row.frame=CreateImage("Assignment outline",badge.transform,TextMuted);row.frame.sprite=SelectionFrame;row.frame.type=Image.Type.Sliced;row.frame.raycastTarget=false;Stretch(row.frame.rectTransform);
         row.icon=CreateImage("Activity symbol",badge.transform,TextDark);row.icon.preserveAspect=true;row.icon.raycastTarget=false;AnchorStretch(row.icon.rectTransform,0,0,1,1,14,14,-14,-14);
-        var text=Section(go.transform,"Activity summary");Object.DestroyImmediate(text.GetComponent<ContentSizeFitter>());AddLayoutElement(text,0,-1,1);row.title=Body(text.transform,"Activity",54);row.title.fontStyle=FontStyle.Bold;row.title.fontSize=36;row.detail=Body(text.transform,"Untimed · Unassigned",50);row.detail.fontSize=30;BakeThemes(go.transform);var iconTheme=row.icon.gameObject.AddComponent<ThemeManager>();iconTheme.role=ThemeManager.Role.Text;iconTheme.Paint();var detailTheme=row.detail.GetComponent<ThemeManager>();detailTheme.role=ThemeManager.Role.Muted;detailTheme.Paint();
+        var text=Section(go.transform,"Activity summary");Object.DestroyImmediate(text.GetComponent<ContentSizeFitter>());AddLayoutElement(text,0,-1,1);row.title=Body(text.transform,"Activity",-1);row.title.fontStyle=FontStyle.Bold;row.title.fontSize=36;row.detail=Body(text.transform,"Untimed · Unassigned",-1);row.detail.fontSize=30;BakeThemes(go.transform);var iconTheme=row.icon.gameObject.AddComponent<ThemeManager>();iconTheme.role=ThemeManager.Role.Text;iconTheme.Paint();var detailTheme=row.detail.GetComponent<ThemeManager>();detailTheme.role=ThemeManager.Role.Muted;detailTheme.Paint();
         var prefab=PrefabUtility.SaveAsPrefabAsset(go,PrefabFolder+"/FamilyActivityRow.prefab");Object.DestroyImmediate(go);return prefab.GetComponent<FamilyActivityRow>();
     }
     static void BuildProfiles(Transform root,Transform settings)
     {
-        var c=root.gameObject.AddComponent<FamilyProfileController>();c.panel=CreateScreen("Family Profiles",root);var form=ScreenContent(c.panel,"Family profiles");BackButton(c.panel);Disclosure(settings,"Family profiles",c.Open);
-        c.person=Choice(form,"Person",new[]{"New person"});c.displayName=CompactField(form,"profileName","Display name");c.initials=CompactField(form,"profileInitials","Initials (optional)");c.color=Choice(form,"Color",new[]{"Blue","Pink","Aqua","Gold","Purple","Orange","Green","Rose"});c.active=Check(form,"Active",true,96);c.link=Choice(form,"Linked account",new[]{"Unlinked (no login required)"});Command(form,"Refresh signed-in group accounts",c.RefreshMembers);c.shiftOwner=Check(form,"Owns this work rotation",false,96);c.save=Command(form,"Save person",c.Save);c.archive=Command(form,"Archive person",c.Archive);c.message=Body(form,"",240);c.panel.SetActive(false);
+        var c=root.gameObject.AddComponent<FamilyProfileController>();c.panel=CreateScreen("Family Profiles",root);c.panel.AddComponent<ProfileDraftReturn>().controller=c;var form=ScreenContent(c.panel,"Family profiles");BackButton(c.panel);Disclosure(settings,"Family profiles",c.Open);
+        c.person=Choice(form,"Person",new[]{"Add Person"});AttachSelectionSwatch(c.person);var device=Section(form,"Device profile setting");c.deviceProfile=Choice(device.transform,"Me on this device",new[]{"No device profile"});AttachSelectionSwatch(c.deviceProfile);Body(device.transform,"Local selection; this is not a verified Google identity.",90).fontSize=30;
+        c.displayName=CompactField(form,"profileName","Display name");c.initials=CompactField(form,"profileInitials","Initials (optional)");c.color=Choice(form,"Color",new[]{"Blue","Pink","Aqua","Gold","Purple","Orange","Green","Rose"});AttachSelectionSwatch(c.color);c.active=Check(form,"Active",true,96);c.link=Choice(form,"Linked account",new[]{"Unlinked (no login required)"});Command(form,"Refresh signed-in group accounts",c.RefreshMembers);c.shiftOwner=Check(form,"Owns this work rotation",false,96);c.save=Command(form,"Save person",c.Save);c.archive=Command(form,"Archive person",c.Archive);c.message=Body(form,"",-1);c.message.fontSize=30;c.panel.SetActive(false);
     }
     static ActivityTemplateController BuildTemplates(Transform root,Transform settings,ActivityEditor editor)
     {
-        var c=root.gameObject.AddComponent<ActivityTemplateController>();c.editor=editor;c.panel=CreateScreen("Activity Templates",root);var form=ScreenContent(c.panel,"Activity templates");BackButton(c.panel);Disclosure(settings,"Activity templates",c.Open);c.selection=Choice(form,"Template",new[]{"No templates yet"});c.summary=Body(form,"",300);c.name=CompactField(form,"savedTemplateName","Template name");c.shared=Check(form,"Shared with this calendar",false,96);Command(form,"Use template",c.Use);Command(form,"Edit activity fields",c.Edit);Command(form,"Save name / sharing",c.SaveMetadata);Command(form,"Delete template",c.Delete);c.message=Body(form,"",160);c.panel.SetActive(false);return c;
+        var c=root.gameObject.AddComponent<ActivityTemplateController>();c.editor=editor;c.panel=CreateScreen("Activity Templates",root);var form=ScreenContent(c.panel,"Activity templates");BackButton(c.panel);Disclosure(settings,"Activity templates",c.Open);c.selection=Choice(form,"Template",new[]{"No templates yet"});c.quickStart=StandaloneSelection(root,"Add Activity",new[]{"New activity","Appointment","Note","Saved templates"});c.picker=StandaloneSelection(root,"Saved templates",new[]{"No templates yet"});c.summary=Body(form,"",-1);c.name=CompactField(form,"savedTemplateName","Template name");c.shared=Check(form,"Shared with this calendar",false,96);Command(form,"Use template",c.Use);Command(form,"Edit activity fields",c.Edit);Command(form,"Save name / sharing",c.SaveMetadata);Command(form,"Delete template",c.Delete);c.message=Body(form,"",-1);c.panel.SetActive(false);return c;
     }
     static void BuildPlanner(Transform root,Transform settings,FamilyWorkbench work)
     {
-        var c=root.gameObject.AddComponent<AvailabilityPlanner>();c.workbench=work;c.panel=CreateScreen("Availability Planner",root);var form=ScreenContent(c.panel,"Who's free?");BackButton(c.panel);Disclosure(settings,"Who's free?",c.Open);c.person=Choice(form,"People",new[]{"All active people"});c.date=Picker(form,"Check date",true);c.time=Picker(form,"Check time",false);c.duration=Duration(form,"Needed time",new[]{15,30,60,90,120},10080);c.peopleContent=Expandable(form,"Select multiple people");c.participantPrefab=editorParticipantPrefab();c.weekends=Check(form,"Free weekends (Saturday + Sunday)",false,96);Command(form,"Check this time",c.Check);Command(form,"Find available days (90 days)",c.Search);Command(form,"Next OFF days",c.NextOff);c.message=Body(form,"",240);c.results=Section(form,"Availability results").transform;c.panel.SetActive(false);
+        var c=root.gameObject.AddComponent<AvailabilityPlanner>();c.workbench=work;c.panel=CreateScreen("Availability Planner",root);var form=ScreenContent(c.panel,"Who's free?");BackButton(c.panel);Disclosure(settings,"Who's free?",c.Open);c.person=Choice(form,"People",new[]{"Select family members"});c.person.multiple=true;c.date=Picker(form,"Date",true);c.time=Picker(form,"Time",false);c.duration=Duration(form,"Duration",new[]{15,30,60,90,120},10080);Command(form,"Check this time",c.Check);Command(form,"Find family time",c.FindFamilyTime);Command(form,"Available weekends",c.AvailableWeekends);Command(form,"Next day off",c.NextOff);c.message=Body(form,"",-1);c.message.fontSize=30;c.results=Section(form,"Availability results").transform;c.resultPrefab=AssetDatabase.LoadAssetAtPath<SelectionSheetRow>(PrefabFolder+"/SelectionSheetRow.prefab");c.panel.SetActive(false);
     }
-    static GameObject editorParticipantPrefab()=>AssetDatabase.LoadAssetAtPath<GameObject>(PrefabFolder+"/FamilyParticipant.prefab");
     static void BuildActivityIcons()
     {
         var set=AssetDatabase.LoadAssetAtPath<ActivityIconSet>("Assets/Resources/ActivityIcons.asset");if(set==null){set=ScriptableObject.CreateInstance<ActivityIconSet>();AssetDatabase.CreateAsset(set,"Assets/Resources/ActivityIcons.asset");}
@@ -137,6 +148,7 @@ public static partial class ShiftCalSceneBuilder
         }
     }
     static Sprite NavigationIcon(string kind)=>Artwork("Navigation_"+kind,(x,y)=>{
+        var point=new Vector2(x,y);if(kind=="repeat-cycle")return Line(point,14,40,14,47)||Line(point,14,47,46,47)||Line(point,46,47,53,38)||Line(point,44,39,53,38)||Line(point,53,38,52,48)||Line(point,50,24,50,17)||Line(point,50,17,18,17)||Line(point,18,17,11,26)||Line(point,11,26,20,25)||Line(point,11,26,12,16)?1:0;
         var p=new Vector2(x,y);if(kind=="filter")return Line(p,10,52,54,52)||Line(p,54,52,38,30)||Line(p,38,30,38,12)||Line(p,38,12,26,8)||Line(p,26,8,26,30)||Line(p,26,30,10,52)?1:0;if(kind=="close")return Line(p,16,16,48,48)||Line(p,16,48,48,16)?1:0;
         if(kind=="left")return Line(p,40,12,20,32)||Line(p,20,32,40,52)?1:0;
         if(kind=="right")return Line(p,24,12,44,32)||Line(p,44,32,24,52)?1:0;

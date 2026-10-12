@@ -17,7 +17,7 @@ public class ShiftCalRuntimeProbe
     private int checks;
     public ShiftCalRuntimeProbe() => Application.logMessageReceived += Log;
     private void Log(string message,string trace,LogType type) { if(type==LogType.Error||type==LogType.Exception||type==LogType.Assert) errors.Add(message); }
-    private void Check(bool ok,string message) { if(!ok)errors.Add(message);else checks++; }
+    private void Check(bool ok,string message) { if(!ok){errors.Add(message);Debug.LogWarning("UI runtime assertion failed: "+message);}else checks++; }
     public IEnumerator Run()
     {
         for(int i=0;i<8;i++)yield return null;
@@ -80,6 +80,7 @@ public class ShiftCalRuntimeProbe
             cal.NextMonth();yield return null;cal.PrevMonth();yield return null;nav.ShowSettings();yield return null;
         }
         var family=FamilyRuntimeChecks.Exercise(Check);while(family.MoveNext())yield return null;
+        var quality=QualityOfLifeChecks.Runtime(Check);while(quality.MoveNext())yield return null;
         for(int i=0;i<8;i++)yield return null;
         Application.logMessageReceived -= Log;
         foreach(var error in errors)Debug.LogWarning("UI runtime failure: "+error);

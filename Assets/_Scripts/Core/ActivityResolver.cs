@@ -18,6 +18,7 @@ namespace ShiftCal.Core
         public static List<T> CloneList<T>(IEnumerable<T> values)=>values.Select(x=>Clone(x)).ToList();
         public static T Clone<T>(T value) => JsonUtility.FromJson<T>(JsonUtility.ToJson(value));
         public static EventSeries AsEvent(CalendarActivity a, string id = null) => new EventSeries { id=id??"activity-"+a.id,title=a.title,dateKey=a.dateKey,startTime=string.IsNullOrEmpty(a.startTime)?"12:00 AM":a.startTime,notes=a.notes,zone=a.zone,recurrence=a.recurrence,interval=a.interval,weekdays=a.weekdays,until=a.until,count=a.count };
+        public static IEnumerable<DateTime> NextDates(CalendarActivity a,DateTime from,int count=3)=>RecurrenceEngine.Dates(AsEvent(a),from,DateTime.MaxValue.Date.AddDays(-1)).Take(count);
         public static List<ActivityOccurrence> Resolve(ScheduleSave s, DateTime from, DateTime to, string filter="everyone", string uid=null)
         {
             var result=new List<ActivityOccurrence>();
@@ -43,6 +44,7 @@ namespace ShiftCal.Core
             if(string.IsNullOrEmpty(filter)||filter=="everyone")return true;
             if(filter=="unassigned")return string.IsNullOrEmpty(a.assigneeId);
             string person=filter=="mine"?s.profiles.Find(x=>x.active&&!string.IsNullOrEmpty(uid)&&x.linkedUid==uid)?.id:filter;
+            if(filter=="mine"&&s.account=="local")person=s.profiles.Find(p=>p.active&&p.id==App.DeviceCalendarStore.State?.localProfileId)?.id;
             return !string.IsNullOrEmpty(person)&&(a.assigneeId==person||a.participants.Contains(person));
         }
         public static bool Validate(CalendarActivity a,out string error)

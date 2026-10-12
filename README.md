@@ -6,11 +6,15 @@ Continuing on another PC? Start with [HANDOFF.md](HANDOFF.md) for the current go
 
 Open `Assets/Calendar.unity`. The scene, row prefabs, and sprite assets are saved and wired. The permanent scene builder reproduces them; rebuilding replaces manual scene edits.
 
-Tap a date for its compact preview and day details. Add a titled activity or note, choose one of 20 semantic icons, assign responsibility and participants, and optionally add a time, duration, recurrence, and a device alarm. Recurring edits support one occurrence, future occurrences, or the series. Family profiles have stable IDs, colors, optional account linkage, and explicit work-rotation ownership.
+Tap a date for its compact preview and day details. Add Activity opens a quick-start sheet for a new activity, appointment, note, saved templates and recent templates. The selected calendar date is retained through template creation. The compact editor keeps the title and one of 20 icons prominent, uses one No time / Specific time / All day choice, and reveals recurrence, participant and personal-reminder controls as needed.
+
+Ordinary selectors open theme-aware, scrollable sheets with full-field tap targets, readable choices and highlighted selections. Repeat offers Once, Daily, Weekly and Monthly, with weekday chips, a compact interval stepper, optional endings and the next three actual dates. Assignment, participants, filters, templates, profile colors/accounts, alarm durations, sound and recurrence scopes use the same component. Cancel, X and Android Back close the sheet before the parent editor and preserve the draft.
+
+Tap responsibility or participants in Activity Details to change them without reopening the editor. Recurring changes ask for occurrence, future or entire-series scope. A short Undo is available while the authoritative record and revisions remain unchanged. Me uses a linked authenticated profile, or an explicitly selected local device profile; family account links remain owner-managed. Existing profile IDs, colors, recurrence exceptions and local alarm subscriptions are preserved.
 
 The month grid displays assignment-colored icons and overflow without hour labels. Swipe months in Normal mode; Edit mode retains drag selection, bulk shift changes, and pattern repetition. Shift hours and legacy day notes/events remain available in details.
 
-Everyone, Mine, person, and Unassigned filters apply to family activities. Agenda covers the next seven dates. Settings provides profiles, local/shared activity templates, and a bounded availability planner that distinguishes recorded free time, missing work information, and unknown timing.
+Everyone, Mine, person, and Unassigned filters apply to family activities. Agenda groups the next seven days, collapses empty dates, and offers Show all dates. Who's Free uses one multi-person sheet and compact tappable results for a chosen time, family time, weekends or the next day off. It distinguishes recorded free time, known conflicts, incomplete work information and unknown timing. Small save/sync indicators report actual local writes, pending records, cached/offline data, server acknowledgements and conflicts.
 
 Wake rules, event/activity subscriptions, sound/snooze preferences, and native delivery ledgers are **device-local**. Sharing an activity never subscribes another updated phone to its alarm. Legacy migration keeps backups and stable identities; cloud alarm definitions with uncertain device ownership remain disabled until explicitly enabled.
 

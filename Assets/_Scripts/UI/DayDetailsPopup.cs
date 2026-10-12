@@ -70,7 +70,7 @@ namespace ShiftCal.UI
         public void AddEvent()
         {
             if (selected == null) return;
-            System.Action open = () => { Hide(); family.editor.New(selected.dateKey); };
+            System.Action open = () => { Hide(); family.BeginNew(selected.dateKey); };
             if (HasChanges) AppNavigation.Instance.Confirm("Discard unsaved notes before adding an event?", open); else open();
         }
     }

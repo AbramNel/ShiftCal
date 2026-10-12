@@ -40,6 +40,8 @@ namespace ShiftCal.Data
     {
         public int version = 1;
         public string account, installationId, filter = "everyone";
+        public string localProfileId;
+        public List<string> recentTemplates = new List<string>();
         public List<ShiftAlarmRule> rules = new List<ShiftAlarmRule>();
         public List<LocalAlarmSubscription> subscriptions = new List<LocalAlarmSubscription>();
         public List<ActivityTemplate> templates = new List<ActivityTemplate>();

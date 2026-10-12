@@ -59,6 +59,7 @@ public static partial class ShiftCalSceneBuilder
         GameObject settingsScreen = CreateMainSettingsScreen(uiRoot.transform);
         GameObject accountPopup = CreateAccountPopup(uiRoot.transform);
         CreateSchedulingUI(uiRoot.transform, settingsScreen, accountPopup, loginScreen);
+        BuildSelectionSheet(uiRoot.transform);
         CreateFamilyUI(uiRoot.transform, settingsScreen, calendarScreen);
 
         calendarScreen.SetActive(false);

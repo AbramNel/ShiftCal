@@ -16,7 +16,7 @@ namespace ShiftCal.UI
         public Transform agendaContent;
         public ScheduleListRow rowPrefab;
         public List<InputField> eventFields = new List<InputField>();
-        public Dropdown recurrence, editScope, linkedShift, timingMode, repeatEnding, dayContextChoice, eventSound;
+        public SelectionField recurrence, editScope, linkedShift, timingMode, repeatEnding, dayContextChoice, eventSound;
         public PickerField eventDate, eventTime, endingDate;
         public Toggle[] weekdays;
         public Toggle eventAlarm, eventEnabled, eventVibration, defaultSettings;
@@ -42,7 +42,7 @@ namespace ShiftCal.UI
             + string.Join("|", new[]{recurrence,editScope,linkedShift,timingMode,repeatEnding,eventSound}.Select(d => d.value.ToString()))
             + string.Join("|", new[]{reminderChoice,beforeShift,snoozeOverride}.Select(d => d.choice.value + ":" + d.custom.text));
         public bool HasEditorChanges => EditorSignature != editorSnapshot;
-        public Dropdown memberChoice;
+        public SelectionField memberChoice;
         private string memberSignature="";
         private string editingEvent, originalDate, editingRule;
         private string undoId;

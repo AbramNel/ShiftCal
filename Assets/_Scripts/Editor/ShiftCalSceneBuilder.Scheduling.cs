@@ -206,23 +206,16 @@ public static partial class ShiftCalSceneBuilder
         var text=CreateText(label+" Label",row.transform,label,30,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AddLayoutElement(text.gameObject,0,-1,1);
         var check=CreateToggle(label,row.transform);AddLayoutElement(check.gameObject,64,64);check.isOn=initial;return check;
     }
-    private static Dropdown Choice(Transform content,string label,string[] values,bool shift=false)
+    private static SelectionField Choice(Transform content,string label,string[] values,bool shift=false)
     {
         Body(content,label,label.Length>42?90:56);
         var root=CreatePanel(label,content,Input);AddLayoutElement(root,-1,128);
-        Dropdown drop=shift?root.AddComponent<ShiftDropdown>():root.AddComponent<Dropdown>();drop.targetGraphic=root.GetComponent<Image>();
+        root.GetComponent<Image>().raycastTarget=true;
+        SelectionField drop=shift?root.AddComponent<ShiftDropdown>():root.AddComponent<SelectionField>();drop.heading=label;
+        drop.button=root.AddComponent<Button>();drop.button.targetGraphic=root.GetComponent<Image>();UnityEventTools.AddPersistentListener(drop.button.onClick,drop.Open);
         var caption=CreateText("Value",root.transform,values[0],34,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(caption.rectTransform,0,0,1,1,24,8,-60,-8);drop.captionText=caption;
-        var arrow=CreateText("Arrow",root.transform,"v",30,Primary,TextAnchor.MiddleRight,FontStyle.Bold);Stretch(arrow.rectTransform);
-        var template=CreatePanel("Template",root.transform,Card);AnchorStretch(template.GetComponent<RectTransform>(),0,0,1,0,0,-600,0,0);
-        var scroll=template.AddComponent<ScrollRect>();scroll.horizontal=false;
-        var viewport=CreatePanel("Viewport",template.transform,Color.white);Stretch(viewport.GetComponent<RectTransform>());viewport.AddComponent<Mask>().showMaskGraphic=false;
-        var inner=CreateUiRoot("Content");inner.transform.SetParent(viewport.transform,false);AnchorStretch(inner.GetComponent<RectTransform>(),0,1,1,1,0,-128,0,0);inner.GetComponent<RectTransform>().pivot=new Vector2(.5f,1);
-        var item=CreatePanel("Item",inner.transform,Input);AnchorStretch(item.GetComponent<RectTransform>(),0,0,1,1,0,0,0,0);
-        var toggle=item.AddComponent<Toggle>();toggle.targetGraphic=item.GetComponent<Image>();
-        var text=CreateText("Item Label",item.transform,"Option",34,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(text.rectTransform,0,0,1,1,24,8,-24,-8);
-        if(shift){var swatch=CreateImage("Shift option color",item.transform,Color.white);swatch.sprite=Rounded;swatch.type=Image.Type.Sliced;swatch.raycastTarget=false;AnchorStretch(swatch.rectTransform,0,.5f,0,.5f,18,-20,58,20);AnchorStretch(text.rectTransform,0,0,1,1,76,8,-24,-8);}
-        drop.itemText=text;drop.template=template.GetComponent<RectTransform>();scroll.viewport=viewport.GetComponent<RectTransform>();scroll.content=inner.GetComponent<RectTransform>();
-        template.SetActive(false);drop.AddOptions(new List<string>(values));return drop;
+        var arrow=CreateImage("Selection affordance",root.transform,Primary);arrow.sprite=NavigationIcon("right");arrow.raycastTarget=false;arrow.preserveAspect=true;AnchorStretch(arrow.rectTransform,1,.5f,1,.5f,-58,-20,-18,20);
+        drop.AddOptions(new List<string>(values));return drop;
     }
     private static ScheduleListRow BuildScheduleRowPrefab()
     {

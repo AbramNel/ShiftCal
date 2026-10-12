@@ -1,4 +1,4 @@
-# ShiftCal handoff — October 9, 2026
+# ShiftCal handoff — October 12, 2026
 
 ## Goal
 
@@ -8,7 +8,7 @@ Build a simple shared family calendar around the work rotation: see shifts, add 
 
 ## Where we are
 
-The family update is implemented on **main**, commit `6ac8e14b9c2cead753cc47be17b66e950244dc05`. The saved scene and prefabs are wired. Continue on main; the next phase is real-device and live-cloud acceptance testing.
+The family update and October 12 usability overhaul are implemented on **main**. The family data baseline was `6ac8e14b9c2cead753cc47be17b66e950244dc05`; see the latest main commit for the selection-sheet overhaul. The saved scene and prefabs are wired. Continue on main; the next phase is real-device and live-cloud acceptance testing.
 
 Completed:
 
@@ -17,8 +17,9 @@ Completed:
 - Month gestures, filters, seven-day agenda, templates, availability planning and updated details/navigation in all three themes.
 - Device-local alarms, account isolation and migration backups. Uncertain legacy cloud alarms remain disabled until explicitly enabled.
 - Firebase records, permissions, revision conflicts and tombstones.
+- Reusable tap-based selection sheets, working Activity Repeat, conditional recurrence preview, compact timing/assignment/participant workflows, date-aware quick-start templates, quick reassignment with guarded Undo, collapsed agenda dates, one multi-person planner selector and truthful save/sync status.
 
-Validation passed: **1,048 focused Unity assertions, 131 play-mode assertions with zero errors, 24 native tests and 53 Firebase emulator assertions.** Generated 315 UI renders across three themes and 360×640, 393×851 and 412×915 layouts.
+Latest validation passed: **1,124 focused Unity assertions, 298 play-mode assertions with zero errors, 24 native tests and 53 Firebase emulator assertions.** Generated 369 UI renders across three themes and 360×640, 393×851 and 412×915 layouts. The play-mode run taps real selector fields and sheet rows, saves/reopens Weekly Monday/Wednesday activities, checks recurrence-scope reassignment and Undo, retains template date context, and restores drafts through profile settings.
 
 ## What still needs doing
 
@@ -41,7 +42,7 @@ Limits: planning uses recorded activities and one person's work rotation. Group 
    Reconcile divergence on main; do not reset or force-push.
 2. Install **Unity 6000.3.0f1** with Android Build Support, SDK/NDK and OpenJDK. Open `Assets/Calendar.unity`; Play → **Use on this device** checks local functionality. Firebase SDKs, configuration and web client ID are already committed; verify project and signing fingerprints before live login.
 3. Securely copy **`C:/Users/simyr/.android/debug.keystore`**, alias `androiddebugkey`, and adjust Unity's key path if needed. Do not commit or replace it. Verified fingerprints are in [FIREBASE_SETUP.md](FIREBASE_SETUP.md).
-4. APK: **`Logs/Android/ShiftCal-ui.apk`**, ARM64, non-development, about 32 MiB. **Git does not carry the APK, logs/screenshots, signing key or app-private data.** Copy the APK separately or rebuild with `ShiftCalChecks.BuildAndroid`. Personal alarms remain on each phone.
+4. Fresh October 12 APK: **`Logs/Android/ShiftCal-ui.apk`**, ARM64, non-development, 33,519,562 bytes (about 32 MiB), verified against the unchanged debug certificate. **Git does not carry the APK, logs/screenshots, signing key or app-private data.** Copy the APK separately or rebuild with `ShiftCalChecks.BuildAndroid`. Personal alarms remain on each phone.
 
 Use the saved scene; the builder replaces manual scene edits. Checks: `ShiftCalChecks.Run`, `ShiftCalRuntimeChecks.Run`, `Tools/AndroidChecks` and `Tools/FirebaseChecks`.
 

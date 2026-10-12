@@ -11,14 +11,19 @@ namespace ShiftCal.UI
     public class ActivityTemplateController : MonoBehaviour
     {
         public GameObject panel;
-        public Dropdown selection;
+        public SelectionField selection;
+        public SelectionField quickStart,picker;
         public InputField name;
         public Text summary,message;
         public Toggle shared;
         public ActivityEditor editor;
         List<ActivityTemplate> items=new List<ActivityTemplate>();
-        public void Open(){AppNavigation.Instance.Open(panel);Refresh();}
-        void Start(){selection.onValueChanged.AddListener(_=>Select());}
+        string selectedDate;
+        readonly List<ActivityTemplate> recent=new List<ActivityTemplate>();
+        public void Open(){selectedDate=null;AppNavigation.Instance.Open(panel);Refresh();}
+        bool hooked;
+        void Start()=>Hook();
+        void Hook(){if(hooked)return;hooked=true;selection.onValueChanged.AddListener(_=>Select());quickStart.onValueChanged.AddListener(QuickChoice);picker.onValueChanged.AddListener(UsePicked);}
         void Refresh()
         {
             items=new List<ActivityTemplate>(AppSession.Instance.Data.templates);if(DeviceCalendarStore.State!=null)items.AddRange(DeviceCalendarStore.State.templates);
@@ -26,7 +31,35 @@ namespace ShiftCal.UI
         }
         ActivityTemplate Selected=>selection.value<items.Count?items[selection.value]:null;
         void Select(){var t=Selected;name.text=t?.name??"";shared.isOn=t!=null&&AppSession.Instance.Data.templates.Contains(t);summary.text=t==null?"Create an activity, then use Save as template. Templates never include alarms.":t.activity.title+"\n"+ActivityIconSet.Name(t.activity.icon)+" · "+t.activity.startTime+" · "+t.activity.durationMinutes+" min\n"+ActivityResolver.People(AppSession.Instance.Data,t.activity)+"\n"+t.activity.notes;message.text="";}
-        public void Use(){if(Selected!=null)editor.New(DateKeyUtility.ToDateKey(DateTime.Today),Selected.activity);}
+        public void Use(){if(Selected!=null)UseTemplate(Selected,selectedDate??DateKeyUtility.ToDateKey(DateTime.Today));}
+        public void StartCreation(string key)
+        {
+            Hook();selectedDate=key;recent.Clear();Refresh();
+            var options=new List<SelectionItem>{new SelectionItem("New activity","new","Start with a blank activity"),new SelectionItem("Appointment","appointment","A timed appointment"),new SelectionItem("Note","note","A note with no time"),new SelectionItem("Saved templates","templates","Choose from your device or this calendar")};
+            options[0].icon=ActivityIconSet.Load().Get("activity");options[1].icon=ActivityIconSet.Load().Get("appointment");options[2].icon=ActivityIconSet.Load().Get("note");
+            foreach(var id in DeviceCalendarStore.State?.recentTemplates??new List<string>()){var t=items.Find(x=>x.id==id);if(t==null)continue;recent.Add(t);options.Add(new SelectionItem(t.name,t.id,"Recently used"){icon=ActivityIconSet.Load().Get(t.activity.icon)});if(recent.Count>=3)break;}
+            quickStart.SetOptions(options);quickStart.Open();
+        }
+        void QuickChoice(int index)
+        {
+            if(index==3){PickForDate(selectedDate);return;}if(index>=4){UseTemplate(recent[index-4],selectedDate);return;}
+            var preset=index==0?null:new CalendarActivity{icon=index==1?"appointment":"note",startTime=index==1?"09:00":null,durationMinutes=index==1?30:0,zone="device"};editor.New(selectedDate,preset);
+        }
+        public void PickForDate(string key)
+        {
+            Hook();selectedDate=key;Refresh();picker.SetOptions(items.Select(t=>new SelectionItem(t.name,t.id,AppSession.Instance.Data.templates.Contains(t)?"Shared calendar template":"On this device"){icon=ActivityIconSet.Load().Get(t.activity.icon)}));
+            if(items.Count==0){if(!editor.panel.activeSelf)editor.New(key);editor.message.text="No saved templates yet. Save an activity as a template.";return;}picker.Open();
+        }
+        void UsePicked(int index)
+        {
+            if(index>=items.Count)return;var t=items[index];var key=selectedDate;
+            if(editor.panel.activeSelf&&editor.HasChanges)AppNavigation.Instance.Confirm("Replace this unsaved draft with the template?",()=>UseTemplate(t,key));else UseTemplate(t,key);
+        }
+        void UseTemplate(ActivityTemplate t,string key)
+        {
+            if(DeviceCalendarStore.State!=null){var list=DeviceCalendarStore.State.recentTemplates??(DeviceCalendarStore.State.recentTemplates=new List<string>());list.Remove(t.id);list.Insert(0,t.id);if(list.Count>5)list.RemoveRange(5,list.Count-5);DeviceCalendarStore.Write();}
+            editor.New(key,t.activity);
+        }
         public void Edit(){if(Selected==null)return;editor.EditTemplate(Selected,shared.isOn);}
         public void UpdateDraft(string id,bool wasShared,ActivityTemplate t,bool isShared){var source=wasShared?AppSession.Instance.Data.templates:DeviceCalendarStore.State.templates;source.RemoveAll(x=>x.id==id);SaveDraft(t,isShared);if(wasShared&&!isShared)AppSession.Instance.SaveLocal();DeviceCalendarStore.Write();}
         public void SaveDraft(ActivityTemplate t,bool isShared)

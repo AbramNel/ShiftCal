@@ -46,8 +46,7 @@ namespace ShiftCal.UI
                 if (focused?.touchScreenKeyboard != null) focused.touchScreenKeyboard.active = false;
                 focused?.DeactivateInputField(); EventSystem.current?.SetSelectedGameObject(null); return;
             }
-            foreach (var dropdown in GetComponentsInChildren<Dropdown>(true))
-                if (dropdown.transform.Find("Dropdown List") != null) { dropdown.Hide(); return; }
+            if(SelectionSheet.Instance?.IsOpen==true){SelectionSheet.Instance.Cancel();return;}
             modals.RemoveAll(m => m == null || !m.gameObject.activeInHierarchy);
             if (modals.Count > 0) { modals[modals.Count - 1].RequestClose(); return; }
             var cal = calendarScreen.GetComponent<CalendarController>();

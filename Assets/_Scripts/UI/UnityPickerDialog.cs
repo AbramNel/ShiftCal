@@ -11,7 +11,7 @@ namespace ShiftCal.UI
     {
         public GameObject dateSection, timeSection, clearButton;
         public Text heading;
-        public Dropdown year, month, day, hour, minute;
+        public SelectionField year, month, day, hour, minute;
         private string token;
         private bool isDate, hooked;
         public void Show(PickerField field, string request)
@@ -44,7 +44,7 @@ namespace ShiftCal.UI
             Options(day, Enumerable.Range(1, DateTime.DaysInMonth(2000 + year.value, 1 + month.value)).Select(x => x.ToString()).ToArray());
             day.SetValueWithoutNotify(Mathf.Min(selected, day.options.Count - 1));
         }
-        private static void Options(Dropdown dropdown, string[] values) { dropdown.ClearOptions(); dropdown.AddOptions(values.ToList()); }
+        private static void Options(SelectionField dropdown, string[] values) { dropdown.ClearOptions(); dropdown.AddOptions(values.ToList()); }
         public void Accept()
         {
             string value = isDate ? new DateTime(2000 + year.value, month.value + 1, day.value + 1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
