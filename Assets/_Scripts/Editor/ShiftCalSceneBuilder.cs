@@ -61,6 +61,8 @@ public static partial class ShiftCalSceneBuilder
         CreateSchedulingUI(uiRoot.transform, settingsScreen, accountPopup, loginScreen);
         BuildSelectionSheet(uiRoot.transform);
         CreateFamilyUI(uiRoot.transform, settingsScreen, calendarScreen);
+        CreateWorkedHoursUI(uiRoot.transform);
+        ReplaceNavigationGlyphs(uiRoot.transform);
 
         calendarScreen.SetActive(false);
         settingsScreen.SetActive(false);
@@ -98,7 +100,7 @@ public static partial class ShiftCalSceneBuilder
         var day=CreateText("DayNumber",root.transform,"1",36,TextDark,TextAnchor.UpperLeft,FontStyle.Bold);
         AnchorStretch(day.rectTransform,0,1,0,1,10,-54,66,-8);
         var shift=CreateText("ShiftName",root.transform,"Day-12",30,TextDark,TextAnchor.MiddleLeft,FontStyle.Bold);
-        AnchorStretch(shift.rectTransform,0,.43f,1,.43f,10,-24,-8,24);shift.horizontalOverflow=HorizontalWrapMode.Overflow;
+        AnchorStretch(shift.rectTransform,0,1,1,1,10,-88,-8,-54);shift.horizontalOverflow=HorizontalWrapMode.Overflow;
         Text hours=null;
         var note=CreateText("Note",root.transform,"",26,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);
         AnchorStretch(note.rectTransform,0,0,1,0,10,8,-8,40);note.horizontalOverflow=HorizontalWrapMode.Overflow;
@@ -115,6 +117,7 @@ public static partial class ShiftCalSceneBuilder
         AddOutline(selection.gameObject,Background);
         SetObjectField(cell,"uiBackground",background);SetObjectField(cell,"uiDayNumberLabel",day);SetObjectField(cell,"uiShiftNameLabel",shift);SetObjectField(cell,"uiHoursLabel",hours);SetObjectField(cell,"uiNoteLabel",note);
         CreateCellActivityBadges(cell,root.transform);
+        CreateWorkedBadge(cell,root.transform,dim.transform.GetSiblingIndex());
         SetObjectField(cell,"selectedOutline",selection);SetObjectField(cell,"todayOutline",today);SetObjectField(cell,"dimOverlay",dim);SetObjectField(cell,"noteIcon",noteIcon);SetObjectField(cell,"alarmIcon",alarm);
         var prefab=PrefabUtility.SaveAsPrefabAsset(root,PrefabFolder+"/CalendarDayCell.prefab");Object.DestroyImmediate(root);return prefab;
     }
@@ -172,6 +175,7 @@ public static partial class ShiftCalSceneBuilder
         GameObject screen = CreateScreen("Calendar Screen", parent);
         CreateTopBar(screen.transform, "ShiftCal");
 
+        CalendarController controller = screen.AddComponent<CalendarController>();
         RectTransform monthBar = CreateHorizontalGroup("Month Bar", screen.transform, 18, 12, 12, 8, 8).GetComponent<RectTransform>();
         AnchorStretch(monthBar, 0, 1, 1, 1, 24, -316, -24, -164);
         Image monthImage = monthBar.gameObject.AddComponent<Image>();
@@ -179,10 +183,14 @@ public static partial class ShiftCalSceneBuilder
         AddOutline(monthBar.gameObject, Border);
 
         Button prev = CreateButton("Previous Month Button", monthBar, "<", Vector2.zero, Vector2.zero, Input, Primary, 42);
-        Text month = CreateText("Month Label", monthBar, "July 2026", 40, TextDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+        var monthCenter=CreatePanel("Month summary",monthBar,Color.clear);AddLayoutElement(monthCenter,0,132,1);
+        Text month=CreateText("Month Label",monthCenter.transform,"July 2026",40,TextDark,TextAnchor.MiddleCenter,FontStyle.Bold);AnchorStretch(month.rectTransform,0,.5f,1,1,0,0,0,0);
+        var monthly=CreateButton("Monthly actual hours",monthCenter.transform,"0h logged",Vector2.zero,Vector2.zero,Input,Primary,30);AnchorStretch(monthly.GetComponent<RectTransform>(),0,0,1,.5f,10,0,-10,0);
+        // The whole month summary is a comfortable touch target for its compact pill.
+        monthCenter.GetComponent<Image>().raycastTarget=true;var monthButton=monthCenter.AddComponent<Button>();monthButton.targetGraphic=monthCenter.GetComponent<Image>();UnityEventTools.AddPersistentListener(monthButton.onClick,controller.ShowHoursMonth);UnityEventTools.AddPersistentListener(monthly.onClick,controller.ShowHoursMonth);controller.monthlyHours=monthly.GetComponentInChildren<Text>();
         Button next = CreateButton("Next Month Button", monthBar, ">", Vector2.zero, Vector2.zero, Input, Primary, 42);
         AddLayoutElement(prev.gameObject, 132, 132);
-        AddLayoutElement(month.gameObject, 0, 132, 1);
+
         AddLayoutElement(next.gameObject, 132, 132);
 
         string[] weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
@@ -204,7 +212,7 @@ public static partial class ShiftCalSceneBuilder
         gridLayout.childAlignment = TextAnchor.UpperCenter;
         grid.gameObject.AddComponent<ResponsiveCalendarGrid>();
 
-        CalendarController controller = screen.AddComponent<CalendarController>();
+
         DayDetailsPopup popup = CreateDayDetailsPopup(screen.transform, controller);
         controller.shiftPicker = CreateShiftPicker(screen.transform, controller);
         GameObject repeatPanel = CreateRepeatPanel(screen.transform, controller);
@@ -339,13 +347,14 @@ public static partial class ShiftCalSceneBuilder
         var header=CreateHorizontalGroup("Shift summary",content,18,0,0,0,0);AddLayoutElement(header,-1,70);
         var swatch=CreateImage("Day Details Color",header.transform,Hex("#FBBF24"));swatch.sprite=Rounded;swatch.type=Image.Type.Sliced;AddLayoutElement(swatch.gameObject,64,54);
         var shift=Body(header.transform,"Shift",70);AddLayoutElement(shift.gameObject,0,70,1);
-        var time=Body(content,"Time",58);var hours=Body(content,"Hours",48);var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
-        var person=Field(content,"person","Person (optional)");var note=Field(content,"note","Notes",true);
-        Command(content,"Change shift",popup.ChangeShift);Command(content,"Restore scheduled shift",popup.Restore);Command(content,"Add activity / note",popup.AddEvent);
+        var time=Body(content,"Time",58);var hoursAction=Command(content,"Hours worked · Add",popup.EditHours);popup.workedHours=hoursAction.GetComponentInChildren<Text>();var hoursIcon=CreateImage("Worked clock",hoursAction.transform,Primary);hoursIcon.sprite=Icon("Clock");hoursIcon.raycastTarget=false;AnchorStretch(hoursIcon.rectTransform,0,.5f,0,.5f,20,-24,68,24);AnchorStretch(popup.workedHours.rectTransform,0,0,1,1,88,4,-12,-4);var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
+        var actions=CreateHorizontalGroup("Day quick actions",content,18,0,0,0,0);AddLayoutElement(actions,-1,132);var addEvent=Command(actions.transform,"Add Event",popup.AddEvent);var addAlarm=Command(actions.transform,"Add Alarm",popup.AddAlarm);AddLayoutElement(addEvent.gameObject,0,132,1);AddLayoutElement(addAlarm.gameObject,0,132,1);
+        var note=Field(content,"note","Notes",true);
+        Command(content,"Change shift",popup.ChangeShift);popup.restoreButton=Command(content,"Restore scheduled shift",popup.Restore);
         var footer=CreateHorizontalGroup("Editor actions",card.transform,18,24,24,12,12);AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,0,8,0,150);
         var save=Command(footer.transform,"Save",popup.SaveDetails);AddLayoutElement(save.gameObject,0,-1,1);save.GetComponent<Image>().color=Primary;save.GetComponentInChildren<Text>().color=Hex("#04111F");
-        SetObjectField(popup,"panel",overlay);SetObjectField(popup,"titleLabel",title);SetObjectField(popup,"shiftLabel",shift);SetObjectField(popup,"timeLabel",time);SetObjectField(popup,"hoursLabel",hours);
-        SetObjectField(popup,"colorSwatch",swatch);SetObjectField(popup,"noteInput",note);SetObjectField(popup,"personInput",person);SetObjectField(popup,"eventsLabel",events);
+        SetObjectField(popup,"panel",overlay);SetObjectField(popup,"titleLabel",title);SetObjectField(popup,"shiftLabel",shift);SetObjectField(popup,"timeLabel",time);
+        SetObjectField(popup,"colorSwatch",swatch);SetObjectField(popup,"noteInput",note);SetObjectField(popup,"eventsLabel",events);
         overlay.SetActive(false);return popup;
     }
 

@@ -19,6 +19,9 @@ namespace ShiftCal.UI
         private readonly List<RaycastResult> hits = new List<RaycastResult>();
         public Image[] activityIcons,activityFrames;
         public Text activityOverflow;
+        public GameObject workedBadge;
+        public Text workedLabel;
+        public Image workedClock;
         private List<ActivityOccurrence> activities=new List<ActivityOccurrence>();
         public void Activities(List<ActivityOccurrence> items){activities=items;presentationPending=true;}
         public string DateKey => day?.dateKey;
@@ -30,6 +33,9 @@ namespace ShiftCal.UI
             uiBackground.color = normalColor;
             foreach (var text in new[]{uiDayNumberLabel,uiShiftNameLabel,uiHoursLabel,uiNoteLabel}) if (text != null) text.color = ThemeManager.Legible(normalColor);
             uiDayNumberLabel.text = day.date.Day.ToString(); uiShiftNameLabel.text = Short(day.shiftName, 9);
+            workedBadge.GetComponent<Image>().color=ThemeManager.Token(ThemeManager.Role.Input);workedLabel.color=workedClock.color=ThemeManager.Token(ThemeManager.Role.Text);
+            var logged=App.WorkedHoursStore.Get(day.dateKey);workedBadge.SetActive(logged!=null);
+            workedLabel.text=logged==null?"":App.WorkedHoursStore.Format(logged.hundredths)+"h";
             if (uiHoursLabel != null) {uiHoursLabel.text="";uiHoursLabel.gameObject.SetActive(false);}
             if (uiNoteLabel != null) uiNoteLabel.text = Short(day.note, 11);
             if (dimOverlay != null) { dimOverlay.gameObject.SetActive(!day.isCurrentMonth); dimOverlay.color = ThemeManager.Token(ThemeManager.Role.DimmedDate); }

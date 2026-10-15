@@ -10,7 +10,7 @@ using ShiftCal.Firebase;
 
 namespace ShiftCal.UI
 {
-    public class ScheduleWorkbench : MonoBehaviour
+    public partial class ScheduleWorkbench : MonoBehaviour
     {
         public GameObject agendaPanel, eventPanel;
         public Transform agendaContent;
@@ -40,7 +40,7 @@ namespace ShiftCal.UI
         private string EditorSignature => string.Join("|", eventFields.Select(f => f.text)) + "|" + eventDate.value + "|" + eventTime.value + "|" + endingDate.value
             + string.Join("|", new[]{eventAlarm,eventEnabled,eventVibration,defaultSettings}.Concat(weekdays).Select(t => t.isOn.ToString()))
             + string.Join("|", new[]{recurrence,editScope,linkedShift,timingMode,repeatEnding,eventSound}.Select(d => d.value.ToString()))
-            + string.Join("|", new[]{reminderChoice,beforeShift,snoozeOverride}.Select(d => d.choice.value + ":" + d.custom.text));
+            + shiftWeekdays.isOn + string.Join("|", new[]{reminderChoice,beforeShift,snoozeOverride}.Select(d => d.choice.value + ":" + d.custom.text));
         public bool HasEditorChanges => EditorSignature != editorSnapshot;
         public SelectionField memberChoice;
         private string memberSignature="";
@@ -71,7 +71,7 @@ namespace ShiftCal.UI
             string signature=string.Join("|",FirestoreService.Instance.MemberLabels);
             if(memberChoice!=null&&signature!=memberSignature){memberSignature=signature;memberChoice.ClearOptions();memberChoice.AddOptions(FirestoreService.Instance.MemberLabels.Count==0?new List<string>{"No members loaded"}:FirestoreService.Instance.MemberLabels);}
             if(readinessLabel!=null&&agendaPanel.activeSelf){readinessLabel.text=AndroidBridge.Readiness();permissionSummary.text=AndroidBridge.Call<string>("permissionSummary")??"Alarm readiness - Android device required";}
-            if(AuthService.Instance.HasCachedAccess){string opened=AndroidBridge.Call<string>("opened");if(!string.IsNullOrEmpty(opened)){var hit=JsonUtility.FromJson<Occurrence>(opened);if(hit.sourceId!=null&&hit.sourceId.StartsWith("activity-")){var family=GetComponent<FamilyWorkbench>();var d=DateKeyUtility.FromDateKey(string.IsNullOrEmpty(hit.calendarDateKey)?hit.dateKey:hit.calendarDateKey);var item=ActivityResolver.Resolve(Save,d,d).FirstOrDefault(x=>"activity-"+x.seriesId==hit.sourceId&&x.originalDate==hit.dateKey);if(item!=null)family.Details(item);}else if(hit.id.StartsWith("event:")&&Save.events.Exists(e=>e.id==hit.sourceId))EditEvent(hit.sourceId,hit.dateKey);else if(Save.rules.Exists(r=>r.id==hit.sourceId)){editingRule=hit.sourceId;LoadRule(Save.rules.Find(r=>r.id==hit.sourceId),hit.dateKey);}else ShowAgenda();}}
+            if(AuthService.Instance.HasCachedAccess){string opened=AndroidBridge.Call<string>("opened");if(!string.IsNullOrEmpty(opened)){var hit=JsonUtility.FromJson<Occurrence>(opened);if(hit.sourceId!=null&&hit.sourceId.StartsWith("activity-")){var family=GetComponent<FamilyWorkbench>();var d=DateKeyUtility.FromDateKey(string.IsNullOrEmpty(hit.calendarDateKey)?hit.dateKey:hit.calendarDateKey);var item=ActivityResolver.Resolve(Save,d,d).FirstOrDefault(x=>"activity-"+x.seriesId==hit.sourceId&&x.originalDate==hit.dateKey);if(item!=null)family.Details(item);}else if(hit.id.StartsWith("event:")&&(Save.events.Exists(e=>e.id==hit.sourceId)||PersonalAlarmStore.Definitions.Exists(e=>e.schedule.id==hit.sourceId)))EditEvent(hit.sourceId,hit.dateKey);else if(Save.rules.Exists(r=>r.id==hit.sourceId)){editingRule=hit.sourceId;LoadRule(Save.rules.Find(r=>r.id==hit.sourceId),hit.dateKey);}else ShowAgenda();}}
         }
         public void Hide(){agendaPanel.SetActive(false);eventPanel.SetActive(false);if(messageLabel!=null)messageLabel.text="";}
         public void ShowAgenda(){ CloseEditors(); if (AppNavigation.Instance != null) AppNavigation.Instance.Open(agendaPanel); else agendaPanel.SetActive(true); agendaPanel.SetActive(true); Refresh(); }
@@ -90,7 +90,7 @@ namespace ShiftCal.UI
             linkedShift.onValueChanged.AddListener(_ => ConditionalSections());
             defaultSettings.onValueChanged.AddListener(_ => ConditionalSections());
             editScope.onValueChanged.AddListener(ScopeChanged);
-            dayContextChoice.onValueChanged.AddListener(value => { if (!loading) { recurrence.value = value == 1 ? 4 : 0; ConditionalSections(); } });
+            dayContextChoice.onValueChanged.AddListener(value => { if (!loading) { recurrence.value = privateAlarm ? (value==0?0:value==1?2:4) : value == 1 ? 4 : 0; if(privateAlarm)shiftWeekdays.isOn=value==3; ConditionalSections(); } });
             eventDate.changed.AddListener(_ => {
                 if (string.IsNullOrEmpty(editingEvent) && ruleTemplate == null)
                     for (int i = 0; i < 7; i++) weekdays[i].isOn = i == (int)DateKeyUtility.FromDateKey(eventDate.value).DayOfWeek;
@@ -104,7 +104,7 @@ namespace ShiftCal.UI
         public void NewEvent(string date) => NewEvent(date, -1);
         public void NewEvent(string date, int shiftId)
         {
-            editingEvent = editingRule = null; originalDate = date; ruleTemplate = null;
+            privateAlarm=false;personalDefinition=null;editingEvent = editingRule = null; originalDate = date; ruleTemplate = null;
             LoadEvent(new EventSeries { title = "", dateKey = date, startTime = "13:00", zone = "device", alarm = true,
                 useDefaultAlarmSettings = true, weekdays = new List<int> { (int)DateKeyUtility.FromDateKey(date).DayOfWeek } });
             PopulateShifts(shiftId);
@@ -122,7 +122,8 @@ namespace ShiftCal.UI
         }
         public void EditEvent(string id,string date)
         {
-            var e=Save.events.Find(x=>x.id==id);if(e==null)return;
+            var local=PersonalAlarmStore.Definitions.Find(x=>x.schedule.id==id);if(local!=null){EditPersonal(local,date);return;}
+            privateAlarm=false;personalDefinition=null;var e=Save.events.Find(x=>x.id==id);if(e==null)return;
             editingEvent=id; editingRule=null; ruleTemplate=null; originalDate=date;
             var ex=Save.exceptions.Find(x=>x.seriesId==id&&x.originalDate==date);
             var copy=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(ex?.replacement??e));
@@ -132,19 +133,20 @@ namespace ShiftCal.UI
         }
         private void LoadEvent(EventSeries e)
         {
+            editorAccount=Save.account;editorGroup=Save.group.groupId;
             InitializeEditor(); loading = true;
             eventTemplate = JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(e));
             CloseEditors(); eventPanel.SetActive(true); eventPanel.transform.SetAsLastSibling();
-            editorHeading.text = string.IsNullOrEmpty(editingEvent) ? "New event" : "Edit event";
+            editorHeading.text = string.IsNullOrEmpty(editingEvent) ? "New event" : "Edit event";EditorSaveLabel("Save Event");
             Set(eventFields,"title",e.title); Set(eventFields,"notes",e.notes); Set(eventFields,"interval",e.interval.ToString()); Set(eventFields,"count",Math.Max(1,e.count).ToString());
             eventDate.Set(e.dateKey); eventTime.Set(e.startTime); endingDate.Set(string.IsNullOrEmpty(e.until) ? e.dateKey : e.until);
-            recurrence.ClearOptions();recurrence.AddOptions(new List<string>{"Once","Daily","Weekly","Monthly"});if(string.IsNullOrEmpty(editingEvent))recurrence.AddOptions(new List<string>{"On shift days"});recurrence.SetValueWithoutNotify((int)e.recurrence); editScope.ClearOptions(); editScope.AddOptions(new List<string>{"This occurrence","This and future occurrences","Entire series"}); editScope.SetValueWithoutNotify(0);
+            recurrence.ClearOptions();recurrence.AddOptions(new List<string>{"This date only","Daily","Selected weekdays","Monthly"});if(string.IsNullOrEmpty(editingEvent))recurrence.AddOptions(new List<string>{"On shift days"});recurrence.SetValueWithoutNotify((int)e.recurrence); editScope.ClearOptions(); editScope.AddOptions(new List<string>{"This occurrence","This and future occurrences","Entire series"}); editScope.SetValueWithoutNotify(0);
             timingMode.SetValueWithoutNotify(0);
             repeatEnding.SetValueWithoutNotify(!string.IsNullOrEmpty(e.until)?1:e.count>0?2:0);
             eventAlarm.isOn=e.alarm; eventEnabled.isOn=e.enabled; eventVibration.isOn=e.vibration; eventSound.SetValueWithoutNotify(SoundIndex(e.sound)); defaultSettings.isOn=e.useDefaultAlarmSettings;
             reminderChoice.Set(e.reminder ? e.reminderMinutes == 0 ? -1 : e.reminderMinutes : 0); snoozeOverride.Set(e.snoozeMinutes); beforeShift.Set(90);
             for(int i=0;i<weekdays.Length;i++)weekdays[i].isOn=e.weekdays.Contains(i);
-            contextSection.SetActive(false); advancedSection.SetActive(false); PopulateShifts(-1); loading = false;
+            shiftWeekdays.isOn=false;contextSection.SetActive(false); advancedSection.SetActive(false); PopulateShifts(-1); loading = false;
             ConditionalSections(); Message(""); editorSnapshot = EditorSignature;
             eventPanel.GetComponent<ModalPanel>().HasChanges=()=>HasEditorChanges; eventPanel.GetComponent<ModalPanel>().Close=CloseEditors;
         }
@@ -153,19 +155,20 @@ namespace ShiftCal.UI
             if (recurrence == null || loading) return;
             bool linked = recurrence.value == 4, single = ruleTemplate != null && editScope.value == 0;
             bool repeating = !linked && recurrence.value > 0;
-            intervalSection.SetActive(repeating); weekdaySection.SetActive(!linked && recurrence.value == 2);
+            intervalSection.SetActive(repeating); weekdaySection.SetActive(!linked && recurrence.value == 2 || linked && !single && shiftWeekdays.isOn);
             endingSection.SetActive(repeating); endingDateSection.SetActive(repeating && repeatEnding.value == 1); countSection.SetActive(repeating && repeatEnding.value == 2);
             shiftSection.SetActive(linked && !single); beforeSection.SetActive(linked && !single && timingMode.value == 0);
             timeSection.SetActive(!linked || single || timingMode.value == 1);
             scopeSection.SetActive(ruleTemplate != null || !string.IsNullOrEmpty(editingEvent) && Save.events.Find(x=>x.id==editingEvent)?.recurrence != RecurrenceKind.Once);
             recurrence.interactable = ruleTemplate == null;
+            if(personalDefinition!=null)scopeSection.SetActive(personalDefinition.schedule.recurrence!=RecurrenceKind.Once);
             reminderChoice.gameObject.SetActive(!linked); timingPreview.gameObject.SetActive(linked);
             foreach(var f in eventFields.Where(x=>x.name=="title"||x.name=="notes"))f.interactable=!single;
             eventAlarm.interactable=!single;
             advancedButton.SetActive(!single); if(single)advancedSection.SetActive(false);
             // Existing EventSeries remain EventSeries; changing engine requires a deliberate new definition.
             if (!string.IsNullOrEmpty(editingEvent) && recurrence.value == 4) { recurrence.SetValueWithoutNotify((int)eventTemplate.recurrence); linked = false; }
-            deleteButton.SetActive(!string.IsNullOrEmpty(editingEvent) || ruleTemplate != null);
+            deleteButton.SetActive(!string.IsNullOrEmpty(editingEvent) || ruleTemplate != null || personalDefinition!=null);
             deleteButton.GetComponentInChildren<Text>().text = ruleTemplate != null ? single ? "Skip this occurrence" : "Delete rule" : "Delete event";
             overrideSection.SetActive(!defaultSettings.isOn);
             intervalLabel.text = "Every N " + (recurrence.value == 1 ? "days" : recurrence.value == 2 ? "weeks" : "months");
@@ -185,6 +188,7 @@ namespace ShiftCal.UI
         {
             try
             {
+                if(editorAccount!=null&&(editorAccount!=Save.account||editorGroup!=Save.group.groupId))throw new ArgumentException("The active calendar changed. Reopen the editor.");
                 if (recurrence.value == 4) { SaveLinked(); return; }
                 var e=JsonUtility.FromJson<EventSeries>(JsonUtility.ToJson(eventTemplate)); e.id=Guid.NewGuid().ToString("N");
                 e.title=Get(eventFields,"title"); e.dateKey=eventDate.value; e.startTime=eventTime.value; e.notes=Get(eventFields,"notes");
@@ -208,6 +212,7 @@ namespace ShiftCal.UI
                     if(e.snoozeMinutes==eventTemplate.snoozeMinutes)e.snoozeMinutes=old.snoozeMinutes;
                     if(!RecurrenceEngine.Validate(e,out error)){Message(error);return;}
                 }
+                if(privateAlarm){PersonalAlarmStore.Save(e,personalDefinition,originalDate,editScope.value);ShowAgenda();return;}
                 if(old==null)Save.events.Add(e);
                 else if(editScope.value==0 && old.recurrence!=RecurrenceKind.Once)
                 {
@@ -217,7 +222,7 @@ namespace ShiftCal.UI
                 else if(editScope.value==1&&old.recurrence!=RecurrenceKind.Once)
                 {
                     DateTime cut=DateKeyUtility.FromDateKey(originalDate);
-                    int consumed=RecurrenceEngine.Dates(old,DateKeyUtility.FromDateKey(old.dateKey),cut.AddDays(-1)).Count();
+                    int consumed=RecurrenceEngine.Dates(old,DateKeyUtility.FromDateKey(old.dateKey),cut.AddDays(-1),Save).Count();
                     if(old.count>0 && e.count==old.count)e.count=Math.Max(1,old.count-consumed);
                     old.until=DateKeyUtility.ToDateKey(cut.AddDays(-1));
                     if(cut<=DateKeyUtility.FromDateKey(old.dateKey)){Save.events.Remove(old);Save.exceptions.RemoveAll(x=>x.seriesId==old.id);}
@@ -239,6 +244,7 @@ namespace ShiftCal.UI
         {
             if (loading) return;
             if (ruleTemplate != null) { LoadRule(ruleTemplate, originalDate, scope); return; }
+            if(personalDefinition!=null){PersonalScope(scope);return;}
             var e=Save.events.Find(x=>x.id==editingEvent);
             if(e!=null)
             {
@@ -265,6 +271,7 @@ namespace ShiftCal.UI
         });
         private void DeleteEventConfirmed()
         {
+            if(personalDefinition!=null){PersonalAlarmStore.Delete(personalDefinition,originalDate,editScope.value);ShowAgenda();return;}
             var e=Save.events.Find(x=>x.id==editingEvent);if(e==null){ShowAgenda();return;}
             if(editScope.value==0&&e.recurrence!=RecurrenceKind.Once){var ex=Exception(e.id,originalDate);ex.cancelled=true;ex.replacement=null;}
             else if(editScope.value==1&&e.recurrence!=RecurrenceKind.Once&&originalDate!=e.dateKey){e.until=DateKeyUtility.ToDateKey(DateKeyUtility.FromDateKey(originalDate).AddDays(-1));Save.exceptions.RemoveAll(x=>x.seriesId==e.id&&string.CompareOrdinal(x.originalDate,originalDate)>=0);}
@@ -274,11 +281,11 @@ namespace ShiftCal.UI
         public void NewRule()
         {
             NewEvent(); recurrence.value = 4; Set(eventFields,"title","Wake Up");
-            PopulateShifts((int)ShiftTypeId.Day12); timingMode.value = 0; ConditionalSections(); editorSnapshot = EditorSignature;
+            editorHeading.text="New personal shift alarm";EditorSaveLabel("Save Alarm");PopulateShifts((int)ShiftTypeId.Day12); timingMode.value = 0; ConditionalSections(); editorSnapshot = EditorSignature;
         }
         public void LoadRule(ShiftAlarmRule r, string date = null, int scope = -1)
         {
-            if (r == null) return;
+            if (r == null) return;privateAlarm=false;personalDefinition=null;
             editingRule = r.id; editingEvent = null;
             originalDate = date ?? DateKeyUtility.ToDateKey(DateTime.Today);
             ruleTemplate = null;
@@ -286,7 +293,7 @@ namespace ShiftCal.UI
             LoadEvent(new EventSeries { title=r.label,notes=r.notes,dateKey=date??DateKeyUtility.ToDateKey(DateTime.Today),startTime=string.IsNullOrEmpty(r.fixedTime)?"04:00":r.fixedTime,
                 alarm=!r.calendarOnly&&r.audible,enabled=r.enabled&&!Save.mutedRules.Contains(r.id),vibration=r.vibration,sound=r.sound,snoozeMinutes=r.snoozeMinutes,useDefaultAlarmSettings=r.useDefaultAlarmSettings });
             ruleTemplate=JsonUtility.FromJson<ShiftAlarmRule>(JsonUtility.ToJson(r)); loading=true;
-            editorHeading.text="Edit shift event"; recurrence.SetValueWithoutNotify(4);
+            editorHeading.text="Personal shift alarm";EditorSaveLabel("Save Alarm");shiftWeekdays.isOn=r.hasWeekdayConstraint;for(int i=0;i<7;i++)weekdays[i].isOn=(r.weekdays??new List<int>()).Contains(i); recurrence.SetValueWithoutNotify(4);
             editScope.ClearOptions();editScope.AddOptions(new List<string>{"This occurrence","Entire rule"});editScope.SetValueWithoutNotify(scope>=0?scope:date==null?1:0);
             timingMode.SetValueWithoutNotify((int)r.timingMode); beforeShift.Set(r.beforeMinutes); reminderChoice.Set(0);
             PopulateShifts(r.shiftType); loading=false;
@@ -314,6 +321,7 @@ namespace ShiftCal.UI
             r.label=Get(eventFields,"title");if(string.IsNullOrWhiteSpace(r.label))throw new ArgumentException("Enter an event title.");
             r.notes=Get(eventFields,"notes");r.shiftType=shift.id;r.timingMode=(ShiftTimingMode)timingMode.value;r.beforeMinutes=beforeShift.Minutes;r.fixedTime=eventTime.value;
             if(r.timingMode==ShiftTimingMode.FixedTime&&!ShiftTimeUtility.TryParseTime(r.fixedTime,out _))throw new ArgumentException("Choose a time.");
+            r.hasWeekdayConstraint=shiftWeekdays.isOn;r.weekdays=Enumerable.Range(0,7).Where(i=>weekdays[i].isOn).ToList();if(r.hasWeekdayConstraint&&r.weekdays.Count==0)throw new ArgumentException("Choose at least one weekday.");
             r.audible=eventAlarm.isOn;
             // Existing silent notifications remain silent notifications unless Alarm is deliberately changed.
             if(ruleTemplate==null||eventAlarm.isOn!=(!ruleTemplate.calendarOnly&&ruleTemplate.audible))r.calendarOnly=!eventAlarm.isOn;
@@ -353,8 +361,9 @@ namespace ShiftCal.UI
                         (!states.TryGetValue(o.id,out var state)||state.state=="snoozed")).OrderBy(o=>o.at).FirstOrDefault();
                     bool active=r.enabled&&!Save.mutedRules.Contains(r.id);
                     string shift=Save.group.shiftTypes.Find(x=>x.id==r.shiftType)?.name??"Missing shift";
-                    Row(r.label,shift+" shifts • "+(r.timingMode==ShiftTimingMode.FixedTime?r.fixedTime:r.beforeMinutes+" min before start")+"\n"+(next==null?"No upcoming delivery":"Next: "+DayInformation.Time(next))+" • "+(active?"Active":"Paused"),"Edit",()=>{editingRule=r.id;LoadRule(r);},active?"Pause":"Resume",()=>{r.enabled=true;if(active)Save.mutedRules.Add(r.id);else Save.mutedRules.Remove(r.id);AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(r.id));
+                    Row(r.label,shift+" shifts"+(r.hasWeekdayConstraint?" · "+string.Join(", ",r.weekdays.Select(i=>System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[i])):"")+" • "+(r.timingMode==ShiftTimingMode.FixedTime?r.fixedTime:r.beforeMinutes+" min before start")+"\n"+(next==null?"No upcoming delivery":"Next: "+DayInformation.Time(next))+" • "+(active?"Active":"Paused"),"Edit",()=>{editingRule=r.id;LoadRule(r);},active?"Pause":"Resume",()=>{r.enabled=true;if(active)Save.mutedRules.Add(r.id);else Save.mutedRules.Remove(r.id);AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(r.id));
                 }
+                PersonalRows(occurrences,now);
                 if(!upcomingOpen)return;
                 string deliveries=AndroidBridge.Call<string>("specialDeliveries");
                 var special=string.IsNullOrEmpty(deliveries)?new List<Occurrence>():JsonUtility.FromJson<OccurrenceList>(deliveries).items;
@@ -404,10 +413,10 @@ namespace ShiftCal.UI
         public void ExportBackup()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            string error=AndroidBridge.Call<string>("backup",JsonUtility.ToJson(Save,true));Message(error??"");
+            string error=AndroidBridge.Call<string>("backup",JsonUtility.ToJson(DeviceCalendarStore.SharedCopy(Save),true));Message(error??"");
 #else
             string path=System.IO.Path.Combine(Application.persistentDataPath,"ShiftCal-backup-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json");
-            System.IO.File.WriteAllText(path,JsonUtility.ToJson(Save,true));Message("Backup: "+path);
+            System.IO.File.WriteAllText(path,JsonUtility.ToJson(DeviceCalendarStore.SharedCopy(Save),true));Message("Backup: "+path);
 #endif
         }
         public void ClearMessage() => Message("");

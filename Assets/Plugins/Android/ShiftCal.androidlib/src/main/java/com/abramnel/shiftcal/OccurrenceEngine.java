@@ -30,11 +30,22 @@ public final class OccurrenceEngine {
         int months=(d.getYear()-start.getYear())*12+d.getMonthValue()-start.getMonthValue();
         return months%n==0&&d.getDayOfMonth()==Math.min(start.getDayOfMonth(),d.lengthOfMonth());
     }
-    static List<LocalDate> dates(JSONObject e, LocalDate from, LocalDate to) {
+    static int resolvedShift(JSONObject save,LocalDate date) {
+        JSONObject group=save.optJSONObject("group");JSONArray pattern=array(group,"pattern");
+        int type=pattern.length()==0?0:pattern.optInt(Math.floorMod((int)java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(group.optString("startDateKey")),date),pattern.length()));
+        JSONArray overrides=array(save,"overrides");for(int i=0;i<overrides.length();i++){JSONObject o=overrides.optJSONObject(i);if(o!=null&&o.optString("dateKey").equals(date.toString())&&!o.optBoolean("scheduledShift"))type=o.optInt("shiftType");}return type;
+    }
+    static boolean shiftMatches(JSONObject save,JSONObject e,LocalDate date) {
+        if(!e.optBoolean("hasShiftConstraint"))return true;if(save==null||save.optJSONObject("group")==null)return false;
+        int required=e.optInt("requiredShiftType");JSONArray shifts=array(save.optJSONObject("group"),"shiftTypes");boolean exists=false;for(int i=0;i<shifts.length();i++)if(shifts.optJSONObject(i)!=null&&shifts.optJSONObject(i).optInt("id")==required)exists=true;
+        return exists&&resolvedShift(save,date)==required;
+    }
+    static List<LocalDate> dates(JSONObject e, LocalDate from, LocalDate to) { return dates(e,from,to,null); }
+    static List<LocalDate> dates(JSONObject e, LocalDate from, LocalDate to,JSONObject save) {
         LocalDate start=LocalDate.parse(e.optString("dateKey")), end=to;
         String until=e.optString("until"); if(!until.isEmpty()&&LocalDate.parse(until).isBefore(end))end=LocalDate.parse(until);
         int ordinal=0,max=e.optInt("count"); List<LocalDate> result=new ArrayList<>();
-        for(LocalDate d=start;!d.isAfter(end);d=d.plusDays(1)) if(matches(e,d)){
+        for(LocalDate d=start;!d.isAfter(end);d=d.plusDays(1)) if(matches(e,d)&&shiftMatches(save,e,d)){
             if(max>0&&++ordinal>max)break;
             if(!d.isBefore(from))result.add(d);
             if(e.optInt("recurrence")==0)break;
@@ -52,7 +63,7 @@ public final class OccurrenceEngine {
         String id=series.optString("id"), date=detail==series?original:detail.optString("dateKey");
         long at=instant(date,detail.optString("startTime"),detail.optString("zone","device"));
         if(detail.optBoolean("reminder")&&(!detail.optBoolean("alarm")||detail.optInt("reminderMinutes",15)>0))list.add(make("event:"+id+":"+original+":reminder",id,original,detail.optString("title")+" - reminder",at-detail.optInt("reminderMinutes",15)*60000L,false,detail).put("isEvent",true).put("calendarDateKey",date));
-        if(detail.optBoolean("alarm"))list.add(make("event:"+id+":"+original+":alarm",id,original,detail.optString("title"),at,true,detail).put("isEvent",true).put("calendarDateKey",date));
+        if(detail.optBoolean("alarm"))list.add(make("event:"+id+":"+original+":alarm",id,original,detail.optString("title"),at-detail.optInt("alarmOffsetMinutes")*60000L,true,detail).put("isEvent",true).put("calendarDateKey",date));
     }
     public static List<JSONObject> resolve(JSONObject save,long now,int horizon) throws JSONException {
         return resolve(save,now,horizon,false);
@@ -64,7 +75,7 @@ public final class OccurrenceEngine {
             JSONObject e=events.getJSONObject(i); String id=e.optString("id"); boolean mute=false;
             for(int j=0;j<muted.length();j++)if(muted.optString(j).equals(id))mute=true;
             if(mute||!e.optBoolean("enabled",true))continue;
-            for(LocalDate d:dates(e,from,to)){
+            for(LocalDate d:dates(e,from,to,save)){
                 boolean except=false;
                 for(int j=0;j<exceptions.length();j++){
                     JSONObject x=exceptions.getJSONObject(j);
@@ -76,20 +87,20 @@ public final class OccurrenceEngine {
                 JSONObject x=exceptions.getJSONObject(j), replacement=x.optJSONObject("replacement");
                 if(x.optString("seriesId").equals(id)&&!x.optBoolean("cancelled")&&replacement!=null){
                     LocalDate d=LocalDate.parse(replacement.optString("dateKey"));
-                    if(!d.isBefore(from)&&!d.isAfter(to))event(list,e,replacement,x.optString("originalDate"));
+                    if(!d.isBefore(from)&&!d.isAfter(to)&&shiftMatches(save,replacement,d))event(list,e,replacement,x.optString("originalDate"));
                 }
             }
         }
         JSONObject group=save.getJSONObject("group"); JSONArray pattern=array(group,"pattern"), shifts=array(group,"shiftTypes"), overrides=array(save,"overrides"), rules=array(save,"rules");
         LocalDate anchor=LocalDate.parse(group.optString("startDateKey"));
         for(LocalDate d=from;!d.isAfter(to);d=d.plusDays(1)){
-            String key=d.toString(); int type=pattern.length()==0?0:pattern.optInt(Math.floorMod((int)java.time.temporal.ChronoUnit.DAYS.between(anchor,d),pattern.length()));
-            for(int i=0;i<overrides.length();i++){JSONObject o=overrides.getJSONObject(i);if(o.optString("dateKey").equals(key)&&!o.optBoolean("scheduledShift"))type=o.optInt("shiftType");}
+            String key=d.toString(); int type=resolvedShift(save,d);
             JSONObject shift=null; for(int i=0;i<shifts.length();i++)if(shifts.getJSONObject(i).optInt("id")==type)shift=shifts.getJSONObject(i);
             if(shift==null)continue;
             for(int i=0;i<rules.length();i++){
                 JSONObject r=rules.getJSONObject(i);boolean mutedRule=false;JSONArray muteRules=array(save,"mutedRules");for(int j=0;j<muteRules.length();j++)if(muteRules.optString(j).equals(r.optString("id")))mutedRule=true;
                 if(mutedRule)continue;if(!r.optString("groupId").isEmpty()&&!r.optString("groupId").equals(group.optString("groupId")))continue;if(!r.optBoolean("enabled",true)||r.optInt("shiftType")!=type)continue;
+                if(r.optBoolean("hasWeekdayConstraint")){boolean day=false;JSONArray days=array(r,"weekdays");for(int j=0;j<days.length();j++)if(days.optInt(j)==d.getDayOfWeek().getValue()%7)day=true;if(!day)continue;}
                 if(r.optBoolean("calendarOnly")&&!includeCalendarOnly||!r.optString("fromDate").isEmpty()&&key.compareTo(r.optString("fromDate"))<0)continue;
                 String clock=r.optInt("timingMode")==1?r.optString("fixedTime"):shift.optString("startTime");
                 long at;try{at=instant(key,clock,"device")-(r.optInt("timingMode")==0?r.optInt("beforeMinutes",90)*60000L:0);}catch(IllegalArgumentException invalid){continue;}

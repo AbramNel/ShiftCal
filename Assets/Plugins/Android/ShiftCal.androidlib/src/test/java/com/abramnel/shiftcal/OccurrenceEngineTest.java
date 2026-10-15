@@ -6,6 +6,27 @@ import java.util.*;
 import static org.junit.Assert.*;
 
 public class OccurrenceEngineTest {
+    @Test public void weekdayAndResolvedShiftCountOnlyEligibleDates() throws Exception {
+        JSONObject s=save();s.getJSONObject("group").put("pattern",new JSONArray("[0]")).getJSONArray("shiftTypes").put(new JSONObject().put("id",0).put("name","Days").put("startTime","05:30"));
+        JSONObject e=event().put("dateKey","2026-10-01").put("hasShiftConstraint",true).put("requiredShiftType",0).put("count",3);s.getJSONArray("events").put(e);
+        s.getJSONArray("overrides").put(new JSONObject().put("dateKey","2026-10-01").put("shiftType",1)).put(new JSONObject().put("dateKey","2026-10-08").put("shiftType",2));
+        List<LocalDate> dates=OccurrenceEngine.dates(e,LocalDate.parse("2026-10-01"),LocalDate.parse("2026-11-30"),s);
+        assertEquals(Arrays.asList(LocalDate.parse("2026-10-15"),LocalDate.parse("2026-10-22"),LocalDate.parse("2026-10-29")),dates);
+        s.getJSONArray("overrides").getJSONObject(0).put("scheduledShift",true);assertEquals(LocalDate.parse("2026-10-01"),OccurrenceEngine.dates(e,LocalDate.parse("2026-10-01"),LocalDate.parse("2026-11-30"),s).get(0));
+        s.getJSONObject("group").getJSONArray("shiftTypes").getJSONObject(2).put("name","Renamed").put("retired",true);assertTrue(OccurrenceEngine.shiftMatches(s,e,LocalDate.parse("2026-10-01")));
+        s.getJSONObject("group").getJSONArray("shiftTypes").remove(2);assertFalse(OccurrenceEngine.shiftMatches(s,e,LocalDate.parse("2026-10-01")));
+    }
+    @Test public void conditionalAudibleOffsetIsSingleAndCrossesMidnight() throws Exception {
+        JSONObject s=save();s.getJSONObject("group").put("pattern",new JSONArray("[2]"));JSONObject e=event().put("hasShiftConstraint",true).put("requiredShiftType",2).put("alarmOffsetMinutes",30);s.getJSONArray("events").put(e);
+        List<JSONObject> list=OccurrenceEngine.resolve(s,Instant.parse("2026-07-01T00:00:00Z").toEpochMilli(),3);assertEquals(1,list.size());assertTrue(list.get(0).getBoolean("audible"));assertEquals(Instant.parse("2026-07-02T17:30:00Z").toEpochMilli(),list.get(0).getLong("at"));
+        e.put("startTime","00:10");list=OccurrenceEngine.resolve(s,Instant.parse("2026-07-01T00:00:00Z").toEpochMilli(),3);assertEquals(Instant.parse("2026-07-02T04:40:00Z").toEpochMilli(),list.get(0).getLong("at"));assertEquals("2026-07-02",list.get(0).getString("calendarDateKey"));
+        s.getJSONArray("overrides").put(new JSONObject().put("dateKey","2026-07-02").put("shiftType",1));assertTrue(OccurrenceEngine.resolve(s,Instant.parse("2026-07-01T00:00:00Z").toEpochMilli(),3).isEmpty());
+    }
+    @Test public void privateWeekdayShiftRuleAndLocalOnceReuseEngine() throws Exception {
+        JSONObject s=save();s.getJSONObject("group").put("pattern",new JSONArray("[2]"));s.getJSONArray("rules").put(new JSONObject().put("id","private").put("shiftType",2).put("hasWeekdayConstraint",true).put("weekdays",new JSONArray("[4]")).put("timingMode",1).put("fixedTime","12:30"));
+        List<JSONObject> list=OccurrenceEngine.resolve(s,Instant.parse("2026-07-01T00:00:00Z").toEpochMilli(),14);assertTrue(list.size()>1);for(JSONObject o:list)assertEquals(DayOfWeek.THURSDAY,LocalDate.parse(o.getString("dateKey")).getDayOfWeek());
+        s.getJSONArray("events").put(event().put("id","personal-once").put("recurrence",0));assertEquals(1,OccurrenceEngine.resolve(s,Instant.parse("2026-07-01T00:00:00Z").toEpochMilli(),14).stream().filter(o->o.optString("sourceId").equals("personal-once")).count());
+    }
     JSONObject event() throws Exception{return new JSONObject().put("id","meeting").put("title","Shutdown meeting").put("dateKey","2026-07-02").put("startTime","1:00 PM").put("zone","America/Chicago").put("recurrence",2).put("interval",1).put("weekdays",new JSONArray("[4]")).put("alarm",true).put("enabled",true);}
     JSONObject save() throws Exception{return new JSONObject().put("group",new JSONObject().put("startDateKey","2026-07-01").put("pattern",new JSONArray("[2,1]")).put("shiftTypes",new JSONArray("[{\"id\":2,\"name\":\"Day-12\",\"startTime\":\"5:30 AM\"},{\"id\":1,\"name\":\"OFF\",\"startTime\":\"\"}]"))).put("events",new JSONArray()).put("rules",new JSONArray()).put("overrides",new JSONArray());}
     @Test public void thursdayMeetingIndependentOfOff() throws Exception{

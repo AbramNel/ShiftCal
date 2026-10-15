@@ -17,8 +17,8 @@ namespace ShiftCal.UI
         [SerializeField] private Text selectionLabel;
         private string selectionStart;
         private string selectionEnd;
-        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; ThemeManager.Changed += Refresh; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
-        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; ThemeManager.Changed -= Refresh; SetEditing(false); }
+        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; ThemeManager.Changed += Refresh; App.WorkedHoursStore.Changed += RefreshHours; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
+        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; ThemeManager.Changed -= Refresh; App.WorkedHoursStore.Changed -= RefreshHours; SetEditing(false); }
 
         public DateTime currentMonth;
         public CalendarGestureController gesture;
@@ -34,6 +34,9 @@ namespace ShiftCal.UI
         public Text editLabel;
         public GameObject selectionBar;
         public DayPreview preview;
+        public Text monthlyHours;
+        public void ShowHoursMonth()=>WorkedHoursEditor.Instance.ShowMonth(currentMonth);
+        private void RefreshHours(){Refresh();preview?.RefreshHours();}
         private Dictionary<string, DayInformation> information = new Dictionary<string, DayInformation>();
         public void ToggleEdit() => SetEditing(!IsEditing);
         public void SetEditing(bool editing)
@@ -54,7 +57,7 @@ namespace ShiftCal.UI
             var info = information.TryGetValue(key, out var value) ? value : new DayInformation();
             if (preview != null && preview.gameObject.activeSelf && preview.DateKey == key) { preview.OpenDetails(); return; }
             preview?.Hide();
-            if (info.HasExtra(day) && preview != null) preview.Show(day, info);
+            if (preview != null) preview.Show(day, info);
             else dayDetailsPopup?.Show(day, info);
         }
         private void UpdateSelectionVisuals()
@@ -111,6 +114,7 @@ namespace ShiftCal.UI
 
             if (uiMonthLabel != null)
                 uiMonthLabel.text = currentMonth.ToString("MMMM yyyy");
+            if(monthlyHours!=null)monthlyHours.text=App.WorkedHoursStore.Format(App.WorkedHoursStore.Total(currentMonth))+"h logged";
 
             for (int i = 0; i < dayCells.Count; i++)
             {

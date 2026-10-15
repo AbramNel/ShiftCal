@@ -81,6 +81,7 @@ public class ShiftCalRuntimeProbe
         }
         var family=FamilyRuntimeChecks.Exercise(Check);while(family.MoveNext())yield return null;
         var quality=QualityOfLifeChecks.Runtime(Check);while(quality.MoveNext())yield return null;
+        var dayHours=DayAndHoursRuntimeChecks.Run(Check);while(dayHours.MoveNext())yield return null;
         for(int i=0;i<8;i++)yield return null;
         Application.logMessageReceived -= Log;
         foreach(var error in errors)Debug.LogWarning("UI runtime failure: "+error);

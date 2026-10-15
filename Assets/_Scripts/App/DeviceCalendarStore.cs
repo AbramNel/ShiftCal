@@ -52,7 +52,7 @@ namespace ShiftCal.App
             s.records.RemoveAll(x=>x.key.StartsWith("rule/"));
             Hydrate(s);
         }
-        public static void RemapGroup(string oldId,string newId){if(State==null)return;foreach(var r in State.rules)if(r.groupId==oldId)r.groupId=newId;Write();if(AppSession.Instance?.Data!=null)Hydrate(AppSession.Instance.Data);}
+        public static void RemapGroup(string oldId,string newId){if(State==null)return;foreach(var r in State.rules)if(r.groupId==oldId)r.groupId=newId;foreach(var a in State.personalAlarms)if(a.groupId==oldId)a.groupId=newId;foreach(var h in State.workedHours)if(h.groupId==oldId)h.groupId=newId;Write();if(AppSession.Instance?.Data!=null)Hydrate(AppSession.Instance.Data);}
         public static void Hydrate(ScheduleSave s)
         {
             if(State==null||State.account!=s.account)return;
@@ -63,7 +63,7 @@ namespace ShiftCal.App
             if(State==null||State.account!=s.account)return;
             State.rules=ActivityResolver.CloneList(s.rules);State.mutedEvents=new List<string>(s.mutedEvents);State.mutedRules=new List<string>(s.mutedRules);Write();
         }
-        public static LocalAlarmSubscription FromEvent(EventSeries e) => new LocalAlarmSubscription{sourceId=e.id,alarm=e.alarm,reminder=e.reminder,enabled=e.enabled,reminderMinutes=e.reminderMinutes,vibration=e.vibration,sound=e.sound,snoozeMinutes=e.snoozeMinutes,advanceMinutes=e.advanceMinutes,useDefaultAlarmSettings=e.useDefaultAlarmSettings};
+        public static LocalAlarmSubscription FromEvent(EventSeries e) => new LocalAlarmSubscription{sourceId=e.id,alarm=e.alarm,reminder=e.reminder,enabled=e.enabled,reminderMinutes=e.reminderMinutes,vibration=e.vibration,sound=e.sound,snoozeMinutes=e.snoozeMinutes,advanceMinutes=e.advanceMinutes,useDefaultAlarmSettings=e.useDefaultAlarmSettings,alarmOffsetMinutes=e.alarmOffsetMinutes};
         public static LocalAlarmSubscription Find(string source,string date=null) => State?.subscriptions.Find(x=>x.sourceId==source&&x.originalDate==date)??State?.subscriptions.Find(x=>x.sourceId==source&&string.IsNullOrEmpty(x.originalDate));
         public static void Subscribe(LocalAlarmSubscription sub)
         {
@@ -76,7 +76,7 @@ namespace ShiftCal.App
         public static void Apply(EventSeries e,LocalAlarmSubscription sub)
         {
             e.alarm=sub?.alarm==true;e.reminder=sub?.reminder==true;e.enabled=sub?.enabled??true;
-            if(sub==null)return;e.reminderMinutes=sub.reminderMinutes;e.vibration=sub.vibration;e.sound=sub.sound;e.snoozeMinutes=sub.snoozeMinutes;e.advanceMinutes=sub.advanceMinutes;e.useDefaultAlarmSettings=sub.useDefaultAlarmSettings;
+            if(sub==null)return;e.reminderMinutes=sub.reminderMinutes;e.vibration=sub.vibration;e.sound=sub.sound;e.snoozeMinutes=sub.snoozeMinutes;e.advanceMinutes=sub.advanceMinutes;e.useDefaultAlarmSettings=sub.useDefaultAlarmSettings;e.alarmOffsetMinutes=sub.alarmOffsetMinutes;
         }
         public static ScheduleSave Effective(ScheduleSave shared,DeviceCalendarState device=null)
         {
@@ -92,6 +92,7 @@ namespace ShiftCal.App
                 EventSeries replacement=null;if(ex.replacement!=null){replacement=ActivityResolver.AsEvent(ex.replacement);Apply(replacement,sub("activity-"+ex.seriesId,ex.originalDate));if(ex.replacement.allDay||string.IsNullOrEmpty(ex.replacement.startTime)){replacement.alarm=false;replacement.reminder=false;}}
                 result.exceptions.Add(new EventException{id=ex.id,seriesId="activity-"+ex.seriesId,originalDate=ex.originalDate,cancelled=ex.cancelled,replacement=replacement});
             }
+            if(device!=null)foreach(var alarm in device.personalAlarms??new List<PersonalAlarmDefinition>())if(alarm.groupId==shared.group.groupId){result.events.Add(ActivityResolver.Clone(alarm.schedule));result.exceptions.AddRange(ActivityResolver.CloneList(alarm.exceptions??new List<EventException>()));}
             return result;
         }
         public static ScheduleSave SharedCopy(ScheduleSave s)
@@ -106,6 +107,10 @@ namespace ShiftCal.App
         static void Validate(DeviceCalendarState state,string account)
         {
             if(state==null||state.account!=account||state.version!=1||state.rules==null||state.subscriptions==null||state.templates==null||state.mutedEvents==null||state.mutedRules==null)throw new InvalidDataException("Invalid device state.");
+            if(state.personalAlarms==null)state.personalAlarms=new List<PersonalAlarmDefinition>();if(state.workedHours==null)state.workedHours=new List<WorkedHoursEntry>();if(state.recentTemplates==null)state.recentTemplates=new List<string>();
+            foreach(var r in state.rules)if(r.weekdays==null)r.weekdays=new List<int>();
+            foreach(var a in state.personalAlarms){if(a==null||string.IsNullOrEmpty(a.groupId)||a.schedule==null||string.IsNullOrEmpty(a.schedule.id)||!RecurrenceEngine.Validate(a.schedule,out _))throw new InvalidDataException("Invalid private alarm; originals retained.");if(a.exceptions==null)a.exceptions=new List<EventException>();}
+            if(state.workedHours.Any(h=>h==null||string.IsNullOrEmpty(h.groupId)||h.hundredths<0||h.hundredths>2400||!DateTime.TryParseExact(h.dateKey,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out _)))throw new InvalidDataException("Invalid worked-hours record; originals retained.");
         }
         public static void Write()
         {

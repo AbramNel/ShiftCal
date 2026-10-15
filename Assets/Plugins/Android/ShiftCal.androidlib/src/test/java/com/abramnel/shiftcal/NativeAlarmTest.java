@@ -23,6 +23,14 @@ public class NativeAlarmTest {
         AlarmStore.write(context,root);assertTrue("Store file exists: "+context.getFilesDir(),AlarmStore.file(context).getBaseFile().exists());assertEquals(root.toString(),AlarmStore.read(context).toString());NativeBridge.channels(context);
     }
     JSONObject occurrence(String id,long at) throws Exception{return OccurrenceEngine.make(id,"r","2026-07-01","Wake Up",at,true,new JSONObject().put("snoozeMinutes",7).put("sound","silent").put("vibration",false));}
+    @Test public void conditionalEarlyAlarmReconcilesAndNeverResurrectsSkip() throws Exception {
+        java.time.LocalDate date=java.time.LocalDate.now().plusDays(1);JSONObject save=account.getJSONObject("save");save.getJSONObject("group").put("pattern",new JSONArray("[2]"));
+        JSONObject e=new OccurrenceEngineTest().event().put("dateKey",date.toString()).put("recurrence",0).put("zone","device").put("hasShiftConstraint",true).put("requiredShiftType",2).put("alarmOffsetMinutes",30);save.getJSONArray("events").put(e);
+        String id="event:meeting:"+date+":alarm";AlarmStore.write(context,root);AlarmScheduler.reconcile(context);JSONObject queue=AlarmStore.read(context).getJSONObject("occurrences");assertTrue(queue.has(id));assertEquals(OccurrenceEngine.instant(date.toString(),"12:30","device"),queue.getJSONObject(id).getLong("at"));assertEquals(1,queue.length());
+        root=AlarmStore.read(context);account=AlarmStore.account(root);account.getJSONObject("save").getJSONArray("overrides").put(new JSONObject().put("dateKey",date.toString()).put("shiftType",1));AlarmStore.write(context,root);AlarmScheduler.reconcile(context);assertFalse(AlarmStore.read(context).getJSONObject("occurrences").has(id));
+        root=AlarmStore.read(context);account=AlarmStore.account(root);account.getJSONObject("save").getJSONArray("overrides").getJSONObject(0).put("shiftType",2);AlarmStore.write(context,root);AlarmScheduler.reconcile(context);assertTrue(AlarmStore.read(context).getJSONObject("occurrences").has(id));AlarmScheduler.action(context,"skip",id);
+        AlarmScheduler.reconcile(context);root=AlarmStore.read(context);assertFalse(root.getJSONObject("occurrences").has(id));assertEquals("skipped",AlarmStore.account(root).getJSONObject("ledger").getJSONObject(id).getString("state"));
+    }
     @Test public void migrationEvidenceIsAccountScopedAndNeverChangesDelivery() throws Exception{
         account.getJSONObject("save").getJSONArray("rules").put(new JSONObject().put("id","original-wake").put("shiftType",2));
         account.getJSONObject("ledger").put("test:skipped",new JSONObject().put("state","skipped"));

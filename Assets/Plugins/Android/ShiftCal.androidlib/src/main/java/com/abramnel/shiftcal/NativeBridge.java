@@ -80,8 +80,10 @@ public final class NativeBridge {
         account.getJSONObject("ledger").remove(id);changes.put(id,at);AlarmStore.write(a,root);AlarmScheduler.reconcile(a,root);
     }return "";}catch(Exception e){return e.getMessage();}}
     static Executor mainExecutor(){return command->new Handler(Looper.getMainLooper()).post(command);}
-    public static String backup(Activity a,String json){try{java.io.File folder=new java.io.File(a.getCacheDir(),"shiftcal-backups");folder.mkdirs();java.io.File file=new java.io.File(folder,"ShiftCal-backup.json");try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));out.getFD().sync();}
-        Uri uri=androidx.core.content.FileProvider.getUriForFile(a,a.getPackageName()+".shiftcal.files",file);Intent share=new Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(ClipData.newRawUri("ShiftCal backup",uri));a.startActivity(Intent.createChooser(share,"Export calendar backup"));return "";
+    public static String backup(Activity a,String json){return backupFile(a,json,false);}
+    public static String backupPersonal(Activity a,String json){return backupFile(a,json,true);}
+    static String backupFile(Activity a,String json,boolean personal){try{java.io.File folder=new java.io.File(a.getCacheDir(),"shiftcal-backups");folder.mkdirs();java.io.File file=new java.io.File(folder,personal?"ShiftCal-personal-backup.json":"ShiftCal-backup.json");try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));out.getFD().sync();}
+        Uri uri=androidx.core.content.FileProvider.getUriForFile(a,a.getPackageName()+".shiftcal.files",file);Intent share=new Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(ClipData.newRawUri("ShiftCal backup",uri));a.startActivity(Intent.createChooser(share,personal?"Export personal hours & alarms backup":"Export calendar backup"));return "";
     }catch(Exception e){return e.getMessage();}}
     public static long instant(Activity a,String date,String time,String zone){return OccurrenceEngine.instant(date,time,zone);}
     public static String commit(Activity a,String json){

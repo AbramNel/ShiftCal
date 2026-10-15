@@ -59,6 +59,7 @@ public static partial class ShiftCalSceneBuilder
         work.shiftSection=Section(form,"Linked shift section");work.linkedShift=Choice(work.shiftSection.transform,"Shift",new[]{"Day-12"},true);
         work.linkedSwatch=CreateImage("Linked shift color",work.linkedShift.transform,Hex("#FBBF24"));AnchorStretch(work.linkedSwatch.rectTransform,0,.5f,0,.5f,18,-20,58,20);work.linkedSwatch.raycastTarget=false;
         AnchorStretch(work.linkedShift.captionText.rectTransform,0,0,1,1,76,8,-60,-8);
+        work.shiftWeekdays=Check(work.shiftSection.transform,"Only selected weekdays",false,96);UnityEventTools.AddPersistentListener(work.shiftWeekdays.onValueChanged,work.WeekdayRestrictionChanged);
         work.timingMode=Choice(work.shiftSection.transform,"Timing",new[]{"Before shift start","Specific time"});
         work.beforeSection=Section(form,"Before shift section");work.beforeShift=Duration(work.beforeSection.transform,"Before shift",new[]{15,30,60,90,120},1440);
         work.beforeShift.minimum=0;
@@ -100,7 +101,7 @@ public static partial class ShiftCalSceneBuilder
         work.invitation=Field(groupContent,"invitation","Invitation code");Command(groupContent,"Join invited group",work.Join);
         work.memberChoice=Choice(groupContent,"Group member",new[]{"No members loaded"});Command(groupContent,"Refresh group members",work.Members);Command(groupContent,"Remove selected member",work.RemoveMember);Command(groupContent,"Leave shared group",work.LeaveGroup);
         Command(groupContent,"Conflicts: keep my edits",work.KeepMine);Command(groupContent,"Conflicts: use remote edits",work.UseRemote);
-        var backup=Expandable(sharing,"Backup / Restore");Command(backup,"Export local backup",work.ExportBackup);Command(backup,"Import this device's local calendar",work.ImportLocal);
+        var backup=Expandable(sharing,"Backup / Restore");Command(backup,"Export shared calendar backup",work.ExportBackup);Command(backup,"Export personal backup (hours & alarms)",work.ExportPersonalBackup);Command(backup,"Import this device's local calendar",work.ImportLocal);
         var advanced=SettingsCard(settingsContent,"Advanced");var utilities=Expandable(advanced,"Sync tools");Command(utilities,"Retry sync",work.Retry);
 
         var loginContent=FindChild(login.transform,"Login Content");

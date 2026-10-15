@@ -19,6 +19,7 @@ namespace ShiftCal.UI
             if (!pressed) return;
             var data=new PointerEventData(EventSystem.current){position=position};hits.Clear();EventSystem.current.RaycastAll(data,hits);
             if (hits.Count > 0 && (hits[0].gameObject.GetComponentInParent<DayPreview>() != null || hits[0].gameObject.GetComponentInParent<CalendarDayCell>() != null)) return;
+            if(hits.Count>0&&hits[0].gameObject.GetComponentInParent<ModalPanel>()!=null)return;
             GetComponent<DayPreview>().Hide();
         }
     }

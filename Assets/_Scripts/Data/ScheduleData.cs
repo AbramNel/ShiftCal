@@ -27,6 +27,10 @@ namespace ShiftCal.Data
         public int snoozeMinutes = 10;
         public int advanceMinutes;
         public bool useDefaultAlarmSettings;
+        public bool hasShiftConstraint;
+        public int requiredShiftType;
+        // Effective native snapshot only. SharedEventDefinition excludes this.
+        public int alarmOffsetMinutes;
     }
     [Serializable] public class EventException
     {
@@ -56,6 +60,8 @@ namespace ShiftCal.Data
         public string fromDate;
         public bool calendarOnly;
         public bool useDefaultAlarmSettings;
+        public bool hasWeekdayConstraint;
+        public List<int> weekdays = new List<int>();
     }
     public enum ShiftTimingMode { BeforeStart, FixedTime }
     [Serializable] public class AlarmPreferences

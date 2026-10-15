@@ -36,7 +36,14 @@ namespace ShiftCal.Core
             return new DateTimeOffset(wall, offset).ToUnixTimeMilliseconds();
 #endif
         }
-        public static IEnumerable<DateTime> Dates(EventSeries e, DateTime from, DateTime to)
+        public static int ResolvedShift(ScheduleSave s,DateTime date)
+        {
+            string key=DateKeyUtility.ToDateKey(date);
+            return s.overrides.LastOrDefault(o=>o.dateKey==key&&!o.scheduledShift)?.shiftType
+                ?? ShiftPatternUtility.Resolve(s.group.pattern,s.group.startDateKey,date);
+        }
+        public static bool ShiftMatches(ScheduleSave s,bool constrained,int shift,DateTime date)=>!constrained||s?.group!=null&&s.group.shiftTypes.Any(t=>t.id==shift)&&ResolvedShift(s,date)==shift;
+        public static IEnumerable<DateTime> Dates(EventSeries e, DateTime from, DateTime to,ScheduleSave schedule=null)
         {
             DateTime start = DateKeyUtility.FromDateKey(e.dateKey);
             DateTime limit = string.IsNullOrEmpty(e.until) ? to.Date : DateKeyUtility.FromDateKey(e.until);
@@ -48,7 +55,7 @@ namespace ShiftCal.Core
                     : e.recurrence == RecurrenceKind.Daily ? days % interval == 0
                     : e.recurrence == RecurrenceKind.Weekly ? ((days + (int)start.DayOfWeek) / 7) % interval == 0 && e.weekdays.Contains((int)d.DayOfWeek)
                     : ((d.Year - start.Year) * 12 + d.Month - start.Month) % interval == 0 && d.Day == Math.Min(start.Day, DateTime.DaysInMonth(d.Year, d.Month));
-                if (!match) continue;
+                if (!match || !ShiftMatches(schedule,e.hasShiftConstraint,e.requiredShiftType,d)) continue;
                 ordinal++;
                 if (e.count > 0 && ordinal > e.count) yield break;
                 if (d >= from.Date) yield return d;
@@ -60,7 +67,7 @@ namespace ShiftCal.Core
             var result = new List<Occurrence>();
             foreach (var e in s.events)
             {
-                foreach (DateTime d in Dates(e, from, to))
+                foreach (DateTime d in Dates(e, from, to,s))
                 {
                     string key = DateKeyUtility.ToDateKey(d);
                     var ex = s.exceptions.Find(x => x.seriesId == e.id && x.originalDate == key);
@@ -70,7 +77,7 @@ namespace ShiftCal.Core
                 foreach (var ex in s.exceptions.Where(x => x.seriesId == e.id && !x.cancelled && x.replacement != null))
                 {
                     DateTime d = DateKeyUtility.FromDateKey(ex.replacement.dateKey);
-                    if (d >= from.Date && d <= to.Date) AddEvent(result, e, ex.replacement, ex.originalDate,e.enabled&&!s.mutedEvents.Contains(e.id));
+                    if (d >= from.Date && d <= to.Date && ShiftMatches(s,ex.replacement.hasShiftConstraint,ex.replacement.requiredShiftType,d)) AddEvent(result, e, ex.replacement, ex.originalDate,e.enabled&&!s.mutedEvents.Contains(e.id));
                 }
             }
             result.AddRange(ShiftDates(s, from, to));
@@ -84,12 +91,12 @@ namespace ShiftCal.Core
             for (DateTime d = from.Date; d <= to.Date; d = d.AddDays(1))
             {
                 string key = DateKeyUtility.ToDateKey(d);
-                int type = s.overrides.Find(o => o.dateKey == key && !o.scheduledShift)?.shiftType
-                    ?? ShiftPatternUtility.Resolve(s.group.pattern, s.group.startDateKey, d);
+                int type = ResolvedShift(s,d);
                 var shift = s.group.shiftTypes.Find(x => x.id == type);
                 if (shift == null) continue;
                 foreach (var rule in s.rules.Where(r => r.shiftType == type &&
                     (string.IsNullOrEmpty(r.groupId) || r.groupId == s.group.groupId) &&
+                    (!r.hasWeekdayConstraint || r.weekdays.Contains((int)d.DayOfWeek)) &&
                     (string.IsNullOrEmpty(r.fromDate) || string.CompareOrdinal(key, r.fromDate) >= 0)))
                 {
                     bool active = rule.enabled && !s.mutedRules.Contains(rule.id);
@@ -118,7 +125,7 @@ namespace ShiftCal.Core
             alerts=alerts&&detail.enabled;
             if (!alerts || !detail.alarm && !detail.reminder) list.Add(Make(series, detail, original, at, false, "view"));
             if (alerts&&detail.reminder) list.Add(Make(series, detail, original, at - detail.reminderMinutes * 60000L, false, "reminder"));
-            if (alerts&&detail.alarm) list.Add(Make(series, detail, original, at, true, "alarm"));
+            if (alerts&&detail.alarm) list.Add(Make(series, detail, original, at-detail.alarmOffsetMinutes*60000L, true, "alarm"));
         }
         private static Occurrence Make(EventSeries e, EventSeries detail, string key, long at, bool audible, string kind)
         {
@@ -132,7 +139,7 @@ namespace ShiftCal.Core
         public static List<Occurrence> EventDates(ScheduleSave save,EventSeries e,DateTime from,DateTime to)
         {
             var result=new List<Occurrence>();
-            foreach(var d in Dates(e,from,to))
+            foreach(var d in Dates(e,from,to,save))
             {
                 string key=DateKeyUtility.ToDateKey(d);
                 if(!save.exceptions.Exists(x=>x.seriesId==e.id&&x.originalDate==key))result.Add(Make(e,e,key,Instant(d,e.startTime,e.zone),false,"view"));
@@ -140,7 +147,7 @@ namespace ShiftCal.Core
             foreach(var ex in save.exceptions.Where(x=>x.seriesId==e.id&&!x.cancelled&&x.replacement!=null))
             {
                 var detail=ex.replacement;DateTime date=DateKeyUtility.FromDateKey(detail.dateKey);
-                if(date>=from.Date&&date<=to.Date)result.Add(Make(e,detail,ex.originalDate,Instant(date,detail.startTime,detail.zone),false,"view"));
+                if(date>=from.Date&&date<=to.Date&&ShiftMatches(save,detail.hasShiftConstraint,detail.requiredShiftType,date))result.Add(Make(e,detail,ex.originalDate,Instant(date,detail.startTime,detail.zone),false,"view"));
             }
             return result.OrderBy(x=>x.at).ToList();
         }
@@ -166,7 +173,7 @@ namespace ShiftCal.Core
                 if (e.interval < 1 || e.interval > 365 || e.count < 0 || e.count > 10000) throw new ArgumentException("Interval 1-365; count 0-10000.");
                 if (e.recurrence == RecurrenceKind.Weekly && e.weekdays.Count == 0) throw new ArgumentException("Choose at least one weekday.");
                 if (!string.IsNullOrEmpty(e.until) && DateKeyUtility.FromDateKey(e.until) < date) throw new ArgumentException("End date must follow start date.");
-                if (e.reminderMinutes < 0 || e.reminderMinutes > 10080 || e.advanceMinutes < 0 || e.advanceMinutes > 10080 || e.snoozeMinutes < 1 || e.snoozeMinutes > 120) throw new ArgumentException("Invalid reminder or snooze duration.");
+                if (e.alarmOffsetMinutes<0||e.alarmOffsetMinutes>10080||e.reminderMinutes < 0 || e.reminderMinutes > 10080 || e.advanceMinutes < 0 || e.advanceMinutes > 10080 || e.snoozeMinutes < 1 || e.snoozeMinutes > 120) throw new ArgumentException("Invalid reminder or snooze duration.");
                 if(e.reminder&&e.alarm&&e.reminderMinutes==0)throw new ArgumentException("Use at least 1 minute for an advance reminder when the event also has an alarm.");
                 return true;
             }

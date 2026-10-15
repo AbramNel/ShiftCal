@@ -85,6 +85,7 @@ namespace ShiftCal.UI
             var save=AppSession.Instance.Data;var a=save.activities.Find(x=>x.id==item.seriesId)??item.activity;
             string repeat="Does not repeat";
             if(a.recurrence!=ShiftCal.Data.RecurrenceKind.Once){string unit=a.recurrence==ShiftCal.Data.RecurrenceKind.Daily?"days":a.recurrence==ShiftCal.Data.RecurrenceKind.Weekly?"weeks":"months";repeat=a.interval==1?a.recurrence.ToString():"Every "+a.interval+" "+unit;if(a.recurrence==ShiftCal.Data.RecurrenceKind.Weekly)repeat+=" · "+string.Join(", ",a.weekdays.OrderBy(x=>x).Select(x=>System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[x]));if(!string.IsNullOrEmpty(a.until))repeat+=" · until "+DateKeyUtility.FromDateKey(a.until).ToString("MMM d, yyyy");if(a.count>0)repeat+=" · "+a.count+" occurrences";}
+            if(a.hasShiftConstraint)repeat+=" · when shift is "+(save.group.shiftTypes.Find(x=>x.id==a.requiredShiftType)?.name??"Missing shift");
             if(save.activityExceptions.Exists(x=>x.seriesId==item.seriesId&&x.originalDate==item.originalDate))repeat+=" · exception for this date";
             return repeat;
         }

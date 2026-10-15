@@ -17,13 +17,13 @@ namespace ShiftCal.Core
     {
         public static List<T> CloneList<T>(IEnumerable<T> values)=>values.Select(x=>Clone(x)).ToList();
         public static T Clone<T>(T value) => JsonUtility.FromJson<T>(JsonUtility.ToJson(value));
-        public static EventSeries AsEvent(CalendarActivity a, string id = null) => new EventSeries { id=id??"activity-"+a.id,title=a.title,dateKey=a.dateKey,startTime=string.IsNullOrEmpty(a.startTime)?"12:00 AM":a.startTime,notes=a.notes,zone=a.zone,recurrence=a.recurrence,interval=a.interval,weekdays=a.weekdays,until=a.until,count=a.count };
-        public static IEnumerable<DateTime> NextDates(CalendarActivity a,DateTime from,int count=3)=>RecurrenceEngine.Dates(AsEvent(a),from,DateTime.MaxValue.Date.AddDays(-1)).Take(count);
+        public static EventSeries AsEvent(CalendarActivity a, string id = null) => new EventSeries { id=id??"activity-"+a.id,title=a.title,dateKey=a.dateKey,startTime=string.IsNullOrEmpty(a.startTime)?"12:00 AM":a.startTime,notes=a.notes,zone=a.zone,recurrence=a.recurrence,interval=a.interval,weekdays=a.weekdays,until=a.until,count=a.count,hasShiftConstraint=a.hasShiftConstraint,requiredShiftType=a.requiredShiftType };
+        public static IEnumerable<DateTime> NextDates(CalendarActivity a,DateTime from,int count=3,ScheduleSave schedule=null)=>RecurrenceEngine.Dates(AsEvent(a),from,a.hasShiftConstraint?from.AddYears(3):DateTime.MaxValue.Date.AddDays(-1),schedule).Take(count);
         public static List<ActivityOccurrence> Resolve(ScheduleSave s, DateTime from, DateTime to, string filter="everyone", string uid=null)
         {
             var result=new List<ActivityOccurrence>();
             foreach(var a in s.activities)
-                foreach(var date in RecurrenceEngine.Dates(AsEvent(a),from,to))
+                foreach(var date in RecurrenceEngine.Dates(AsEvent(a),from,to,s))
                 {
                     string key=DateKeyUtility.ToDateKey(date);
                     if(s.activityExceptions.Exists(x=>x.seriesId==a.id&&x.originalDate==key))continue;
@@ -35,6 +35,7 @@ namespace ShiftCal.Core
         }
         static void Add(List<ActivityOccurrence> list, ScheduleSave s, CalendarActivity a,string id,string original,string actual,string filter,string uid)
         {
+            if(!RecurrenceEngine.ShiftMatches(s,a.hasShiftConstraint,a.requiredShiftType,DateKeyUtility.FromDateKey(actual)))return;
             if(!Matches(s,a,filter,uid))return;
             long at=RecurrenceEngine.Instant(DateKeyUtility.FromDateKey(actual),a.allDay||string.IsNullOrEmpty(a.startTime)?"12:00 AM":a.startTime,a.zone);
             list.Add(new ActivityOccurrence{activity=a,seriesId=id,originalDate=original,dateKey=actual,start=at,end=at+(long)a.durationMinutes*60000});
@@ -75,7 +76,7 @@ namespace ShiftCal.Core
             else if(scope==1&&old.recurrence!=RecurrenceKind.Once&&original!=old.dateKey)
             {
                 var split=DateKeyUtility.FromDateKey(original);
-                int used=RecurrenceEngine.Dates(AsEvent(old),DateKeyUtility.FromDateKey(old.dateKey),split.AddDays(-1)).Count();
+                int used=RecurrenceEngine.Dates(AsEvent(old),DateKeyUtility.FromDateKey(old.dateKey),split.AddDays(-1),s).Count();
                 if(old.count>0&&edited.count==old.count)edited.count=Math.Max(1,old.count-used);
                 old.until=DateKeyUtility.ToDateKey(split.AddDays(-1));edited.id=Guid.NewGuid().ToString("N");s.activities.Add(edited);
                 foreach(var ex in s.activityExceptions.Where(x=>x.seriesId==seriesId&&string.CompareOrdinal(x.originalDate,original)>=0)){ex.seriesId=edited.id;ex.id=edited.id+"_"+ex.originalDate;}

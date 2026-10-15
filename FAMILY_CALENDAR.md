@@ -1,5 +1,7 @@
 # Family calendar implementation
 
+The October 14 [day, personal alarm and worked-hours update](DAY_ALARMS_HOURS.md) supersedes the older day/add-entry wording below and records the latest validation. The family data and migration design described here remains in place.
+
 All work is on `main`. `Assets/Calendar.unity`, editable row prefabs, and the icon assets are committed. The permanent scene builder reproduces the wiring.
 
 ## October 12 usability overhaul

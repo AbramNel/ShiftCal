@@ -1,4 +1,4 @@
-# ShiftCal handoff — October 12, 2026
+# ShiftCal handoff — October 14, 2026
 
 ## Goal
 
@@ -8,9 +8,14 @@ Build a simple shared family calendar around the work rotation: see shifts, add 
 
 ## Where we are
 
-The family update and October 12 usability overhaul are implemented on **main**. The family data baseline was `6ac8e14b9c2cead753cc47be17b66e950244dc05`; see the latest main commit for the selection-sheet overhaul. The saved scene and prefabs are wired. Continue on main; the next phase is real-device and live-cloud acceptance testing.
+The family calendar, October 12 usability overhaul, and October 14 day/alarm/hours update are implemented on **main**. The October 14 work started from `cec4293f39544535448e9a2ce5371d0dae5892f5`. The saved scene and prefabs are wired. Continue on main. See [DAY_ALARMS_HOURS.md](DAY_ALARMS_HOURS.md) for current models, files, backup behavior and validation.
 
 Completed:
+
+- Compact preview and cleaner Day Details, preserving hidden person data when notes are saved.
+- Weekday AND resolved-shift shared recurrence with private audible alarm offsets.
+- Device-local oneoff/weekly alarms and weekday-restricted shift alarm rules through the existing engine.
+- Manual actual hours in integer hundredths, separate calendar badges, monthly totals and a personal backup export.
 
 - Family profiles, colors, account links and work-rotation ownership; unlinked people need no Google account.
 - Activities, notes, 20 icons including karate, assignments, participants, timing/duration, recurrence and exceptions.
@@ -19,7 +24,9 @@ Completed:
 - Firebase records, permissions, revision conflicts and tombstones.
 - Reusable tap-based selection sheets, working Activity Repeat, conditional recurrence preview, compact timing/assignment/participant workflows, date-aware quick-start templates, quick reassignment with guarded Undo, collapsed agenda dates, one multi-person planner selector and truthful save/sync status.
 
-Latest validation passed: **1,124 focused Unity assertions, 298 play-mode assertions with zero errors, 24 native tests and 53 Firebase emulator assertions.** Generated 369 UI renders across three themes and 360×640, 393×851 and 412×915 layouts. The play-mode run taps real selector fields and sheet rows, saves/reopens Weekly Monday/Wednesday activities, checks recurrence-scope reassignment and Undo, retains template date context, and restores drafts through profile settings.
+Latest validation passed: **1,349 focused Unity assertions, 400 play-mode assertions with zero errors, 28 native tests plus lint and 53 Firestore emulator assertions.** Generated 405 UI renders across three themes at 360×640, 393×851 and 412×915. Dense-day checks preserve activity capacity, overflow, notes, alarms, today/selection and all six rows. Real EventSystem tests cover hours save/zero/clear, monthly review/edit, compact Details, private Add Alarm from both day screens, X, Back, selectors and the existing family workflows.
+
+No physical phone was attached (`adb devices -l` returned an empty list). No production Firebase data or rules were modified. Install the newly built APK for these changes; rebuilding an old checkout will not include them.
 
 ## What still needs doing
 

@@ -117,6 +117,11 @@ namespace ShiftCal.App
             return !used;
         }
 
+        public void UpdateDayNotes(string dateKey, string note)
+        {
+            CalendarOverrides.TryGetValue(dateKey, out var existing);
+            UpdateDayDetails(dateKey, note, existing?.personName);
+        }
         public void UpdateDayDetails(string dateKey, string note, string person)
         {
             DateKeyUtility.FromDateKey(dateKey);

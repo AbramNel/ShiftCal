@@ -15,10 +15,11 @@ namespace ShiftCal.UI
             string rhythm="Repeats every "+(a.interval==1?unit:a.interval+" "+unit+"s");
             if(a.recurrence==RecurrenceKind.Weekly)rhythm+=" on "+string.Join(" and ",a.weekdays.OrderBy(i=>i).Select(i=>System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.DayNames[i]));
             if(a.recurrence==RecurrenceKind.Monthly)rhythm+=" on day "+DateKeyUtility.FromDateKey(a.dateKey).Day+" (last day in shorter months)";
+            if(a.hasShiftConstraint)rhythm+=" when the shift is "+(App.AppSession.Instance?.CurrentGroup.shiftTypes.Find(x=>x.id==a.requiredShiftType)?.name??"missing (choose an available shift)");
             var from=DateKeyUtility.FromDateKey(a.dateKey);if(from<DateTime.Today)from=DateTime.Today;
-            var next=ActivityResolver.NextDates(a,from).Select(d=>d.ToString("ddd, MMM d")).ToArray();
+            var next=ActivityResolver.NextDates(a,from,3,App.AppSession.Instance?.Data).Select(d=>d.ToString("ddd, MMM d")).ToArray();
             if(!string.IsNullOrEmpty(a.until))rhythm+="; ends "+DateKeyUtility.FromDateKey(a.until).ToString("MMM d, yyyy");else if(a.count>0)rhythm+="; "+a.count+" occurrences";
-            return rhythm+".\n"+(next.Length>0?"Next: "+string.Join(" · ",next):"No future dates within the selected ending.");
+            return rhythm+".\n"+(next.Length>0?"Next: "+string.Join(" · ",next):"No qualifying dates within the next three years or selected ending.");
         }
     }
 }

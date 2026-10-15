@@ -11,6 +11,7 @@ namespace ShiftCal.UI
     public class ActivityTemplateController : MonoBehaviour
     {
         public GameObject panel;
+        public Sprite alarmIcon,newEventIcon,templateIcon;
         public SelectionField selection;
         public SelectionField quickStart,picker;
         public InputField name;
@@ -30,25 +31,25 @@ namespace ShiftCal.UI
             selection.ClearOptions();selection.AddOptions(items.Count>0?items.Select(x=>x.name+(AppSession.Instance.Data.templates.Contains(x)?" · shared":" · this device")).ToList():new List<string>{"No templates yet"});Select();
         }
         ActivityTemplate Selected=>selection.value<items.Count?items[selection.value]:null;
-        void Select(){var t=Selected;name.text=t?.name??"";shared.isOn=t!=null&&AppSession.Instance.Data.templates.Contains(t);summary.text=t==null?"Create an activity, then use Save as template. Templates never include alarms.":t.activity.title+"\n"+ActivityIconSet.Name(t.activity.icon)+" · "+t.activity.startTime+" · "+t.activity.durationMinutes+" min\n"+ActivityResolver.People(AppSession.Instance.Data,t.activity)+"\n"+t.activity.notes;message.text="";}
+        void Select(){var t=Selected;name.text=t?.name??"";shared.isOn=t!=null&&AppSession.Instance.Data.templates.Contains(t);summary.text=t==null?"Create an event, then use Save as template. Templates never include alarms.":t.activity.title+"\n"+ActivityIconSet.Name(t.activity.icon)+" · "+t.activity.startTime+" · "+t.activity.durationMinutes+" min\n"+ActivityResolver.People(AppSession.Instance.Data,t.activity)+"\n"+t.activity.notes;message.text="";}
         public void Use(){if(Selected!=null)UseTemplate(Selected,selectedDate??DateKeyUtility.ToDateKey(DateTime.Today));}
         public void StartCreation(string key)
         {
             Hook();selectedDate=key;recent.Clear();Refresh();
-            var options=new List<SelectionItem>{new SelectionItem("New activity","new","Start with a blank activity"),new SelectionItem("Appointment","appointment","A timed appointment"),new SelectionItem("Note","note","A note with no time"),new SelectionItem("Saved templates","templates","Choose from your device or this calendar")};
-            options[0].icon=ActivityIconSet.Load().Get("activity");options[1].icon=ActivityIconSet.Load().Get("appointment");options[2].icon=ActivityIconSet.Load().Get("note");
+            var options=new List<SelectionItem>{new SelectionItem("New Event","new","Shared calendar event"){icon=newEventIcon},new SelectionItem("Add Alarm","alarm","Private · only on this device"){icon=alarmIcon},new SelectionItem("Saved Templates","templates","Choose from your device or this calendar"){icon=templateIcon}};
             foreach(var id in DeviceCalendarStore.State?.recentTemplates??new List<string>()){var t=items.Find(x=>x.id==id);if(t==null)continue;recent.Add(t);options.Add(new SelectionItem(t.name,t.id,"Recently used"){icon=ActivityIconSet.Load().Get(t.activity.icon)});if(recent.Count>=3)break;}
             quickStart.SetOptions(options);quickStart.Open();
         }
         void QuickChoice(int index)
         {
-            if(index==3){PickForDate(selectedDate);return;}if(index>=4){UseTemplate(recent[index-4],selectedDate);return;}
-            var preset=index==0?null:new CalendarActivity{icon=index==1?"appointment":"note",startTime=index==1?"09:00":null,durationMinutes=index==1?30:0,zone="device"};editor.New(selectedDate,preset);
+            if(index==2){PickForDate(selectedDate);return;}if(index>=3){UseTemplate(recent[index-3],selectedDate);return;}
+            if(index==1){FindFirstObjectByType<ScheduleWorkbench>().NewPersonalAlarm(selectedDate);return;}
+            editor.New(selectedDate);
         }
         public void PickForDate(string key)
         {
             Hook();selectedDate=key;Refresh();picker.SetOptions(items.Select(t=>new SelectionItem(t.name,t.id,AppSession.Instance.Data.templates.Contains(t)?"Shared calendar template":"On this device"){icon=ActivityIconSet.Load().Get(t.activity.icon)}));
-            if(items.Count==0){if(!editor.panel.activeSelf)editor.New(key);editor.message.text="No saved templates yet. Save an activity as a template.";return;}picker.Open();
+            if(items.Count==0){if(!editor.panel.activeSelf)editor.New(key);editor.message.text="No saved templates yet. Save an event as a template.";return;}picker.Open();
         }
         void UsePicked(int index)
         {
