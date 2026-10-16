@@ -10,6 +10,7 @@ service cloud.firestore {
     function scValidRecord(id) {
       return request.resource.data.keys().hasOnly(['key','json','deleted','revision','author'])
         && request.resource.data.key is string && request.resource.data.json is string
+        && request.resource.data.key.matches('(rotation|shift|override|event|exception|activity|activityException|familyProfile|activityTemplate)/.*')
         && id == request.resource.data.key.replace('/', '~')
         && request.resource.data.json.size() < 250000 && request.resource.data.deleted is bool
         && request.resource.data.author == request.auth.uid && request.resource.data.revision is int;
@@ -49,10 +50,13 @@ service cloud.firestore {
           allow update: if false;
         }
         match /records/{record} {
-          function canEdit() { return scMember(group) && (scOwner(group) || request.resource.data.key.matches('(override|event|exception|activity|activityException|activityTemplate)/.*')); }
+          // Opaque event JSON cannot be safely age-checked in rules. Shared record
+          // removal therefore requires the owner; members retain creation/edit rights.
+          function canRemove() { return scOwner(group) || request.resource.data.key.matches('(override|activityTemplate)/.*'); }
+          function canEdit() { return scMember(group) && (!request.resource.data.deleted || canRemove()) && (scOwner(group) || request.resource.data.key.matches('(override|event|exception|activity|activityException|activityTemplate)/.*')); }
           allow read: if scMember(group) || scOwner(group);
           allow create: if canEdit() && scValidRecord(record) && request.resource.data.key.matches('(rotation|shift|override|event|exception|activity|activityException|familyProfile|activityTemplate)/.*') && request.resource.data.revision == 1;
-          allow update: if canEdit() && scValidRecord(record) && request.resource.data.key == resource.data.key && request.resource.data.revision == resource.data.revision + 1;
+          allow update: if canEdit() && (!resource.data.deleted || canRemove()) && scValidRecord(record) && request.resource.data.key == resource.data.key && request.resource.data.revision == resource.data.revision + 1;
           allow delete: if false;
         }
       }

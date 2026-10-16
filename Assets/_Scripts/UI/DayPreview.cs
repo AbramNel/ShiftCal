@@ -35,6 +35,7 @@ namespace ShiftCal.UI
         {
             selected=day;information=info;account=App.AppSession.Instance.Data.account;group=App.AppSession.Instance.CurrentGroup.groupId;title.text=day.date.ToString("dddd, MMMM d");
             shiftTime.text=string.IsNullOrWhiteSpace(day.startTime)?"":day.startTime+" – "+day.endTime;shift.text=day.shiftName;swatch.color=ShiftStyleUtility.ToColor(day.shiftColorHex);
+            shiftTime.gameObject.SetActive(!string.IsNullOrEmpty(shiftTime.text));
             details.text=string.Join("\n\n",new[]{day.note}
                 .Concat(info.events.Select(DayInformation.EventLine)).Concat(info.alarms.Where(o=>o.isEvent).Select(o=>o.title+" · "+DayInformation.Time(o))).Where(x=>!string.IsNullOrWhiteSpace(x)));
             editor.family?.FillDay(day.dateKey,activityContent);RefreshHours();

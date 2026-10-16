@@ -25,15 +25,16 @@ public static partial class ShiftCalSceneBuilder
         var close=Command(card.transform,"",sheet.Cancel);AnchorStretch(close.GetComponent<RectTransform>(),1,1,1,1,-138,-124,-22,-16);var x=CreateImage("Close icon",close.transform,Primary);x.sprite=NavigationIcon("close");x.raycastTarget=false;AnchorStretch(x.rectTransform,.5f,.5f,.5f,.5f,-23,-23,23,23);
         sheet.content=CreateScrollContent("Selection choices",card.transform,12,20,20,12,12,out var scroll);sheet.scroll=scroll;AnchorStretch(scroll.GetComponent<RectTransform>(),0,0,1,1,8,162,-8,-148);
         var footer=CreateHorizontalGroup("Selection actions",card.transform,18,24,24,12,12);AnchorStretch(footer.GetComponent<RectTransform>(),0,0,1,0,0,12,0,150);
+        sheet.actions=footer;
         var cancel=Command(footer.transform,"Cancel",sheet.Cancel);AddLayoutElement(cancel.gameObject,0,120,1);sheet.done=Command(footer.transform,"Done",sheet.Accept);AddLayoutElement(sheet.done.gameObject,0,120,1);sheet.done.GetComponent<Image>().color=Primary;sheet.done.GetComponentInChildren<Text>().color=Hex("#04111F");
-        var row=CreateHorizontalGroup("SelectionSheetRow",null,20,22,22,20,20);row.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;var bg=row.AddComponent<Image>();bg.sprite=Rounded;bg.type=Image.Type.Sliced;bg.color=Input;
+        var row=CreateHorizontalGroup("SelectionSheetRow",null,16,22,22,16,16);row.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;var bg=row.AddComponent<Image>();bg.sprite=Rounded;bg.type=Image.Type.Sliced;bg.color=Input;
         var view=row.AddComponent<SelectionSheetRow>();view.button=row.AddComponent<Button>();view.button.targetGraphic=bg;
         AddLayoutElement(row,-1,-1);row.GetComponent<LayoutElement>().minHeight=132;
         view.swatch=CreateImage("Selection color",row.transform,Color.white);view.swatch.sprite=Rounded;AddLayoutElement(view.swatch.gameObject,44,44);view.swatch.raycastTarget=false;
         view.icon=CreateImage("Choice icon",row.transform,Primary);AddLayoutElement(view.icon.gameObject,66,66);view.icon.preserveAspect=true;view.icon.raycastTarget=false;
-        var labels=CreateVerticalGroup("Choice labels",row.transform,8,0,0,0,0);AddLayoutElement(labels,0,-1,1);view.label=Body(labels.transform,"Choice",-1);view.label.fontSize=42;view.label.raycastTarget=false;view.description=Body(labels.transform,"Description",-1);view.description.fontSize=34;view.description.color=TextMuted;view.description.raycastTarget=false;
-        view.selected=CreateImage("Choice selected",row.transform,Primary);view.selected.sprite=SelectionFrame;view.selected.type=Image.Type.Sliced;view.selected.raycastTarget=false;AddLayoutElement(view.selected.gameObject,44,44);
-        BakeThemes(row.transform);sheet.rowPrefab=PrefabUtility.SaveAsPrefabAsset(row,PrefabFolder+"/SelectionSheetRow.prefab").GetComponent<SelectionSheetRow>();Object.DestroyImmediate(row);overlay.SetActive(false);
+        var labels=CreateVerticalGroup("Choice labels",row.transform,6,0,0,0,0);AddLayoutElement(labels,0,-1,1);view.label=Body(labels.transform,"Choice",-1);view.label.fontSize=38;view.label.raycastTarget=false;view.description=Body(labels.transform,"Description",-1);view.description.fontSize=30;view.description.color=TextMuted;view.description.raycastTarget=false;
+        view.selected=CreateImage("Choice selected",row.transform,Primary);view.selected.sprite=NavigationIcon("check");view.selected.raycastTarget=false;view.selected.preserveAspect=true;AddLayoutElement(view.selected.gameObject,44,44);
+        BakeThemes(row.transform);Object.DestroyImmediate(view.swatch.GetComponent<ThemeManager>());sheet.rowPrefab=PrefabUtility.SaveAsPrefabAsset(row,PrefabFolder+"/SelectionSheetRow.prefab").GetComponent<SelectionSheetRow>();Object.DestroyImmediate(row);overlay.SetActive(false);
     }
     static InputField Stepper(Transform parent,string key,string label,int max=365)
     {

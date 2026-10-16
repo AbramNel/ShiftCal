@@ -1,4 +1,4 @@
-# ShiftCal handoff — October 15, 2026
+# ShiftCal handoff — October 16, 2026
 
 ## Goal
 
@@ -8,9 +8,13 @@ Build a simple shared family calendar around the work rotation: see shifts, add 
 
 ## Where we are
 
-The family calendar, usability overhaul, day/alarm/hours update, and October 15 presentation/privacy update are implemented on **main**. The latest work started from `2785a7afd27b91ffbb167618d27a72ca8cdb6934`. The saved scene and prefabs are wired. Continue on main. See [PRESENTATION_PRIVACY.md](PRESENTATION_PRIVACY.md) for the latest changes, file map and validation; [DAY_ALARMS_HOURS.md](DAY_ALARMS_HOURS.md) covers models and backup behavior.
+The family calendar and subsequent updates are implemented on **main**. The October 16 quality-of-life update starts from `f3f232a45dc93585020f5013fd0ddc5d5ac8f4c4`. The saved scene and prefabs are wired. Continue on main. See [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md) for current behavior, file map, Firebase diagnosis and acceptance checks; [PRESENTATION_PRIVACY.md](PRESENTATION_PRIVACY.md) covers the preserved Android privacy policy, and [DAY_ALARMS_HOURS.md](DAY_ALARMS_HOURS.md) covers data compatibility.
 
 Completed:
+
+- Display settings and a persistent optional monthly total, long-press date selection, right-aligned actual-hours pills and optional scheduled shift hours.
+- Computed active/history lists, confirmed personal cleanup and separate owner-only shared-history cleanup; recurring definitions, exceptions and in-flight alarms are retained.
+- Compact sound/selection sheets, full-row toggle targets, refreshed older screens and specific sync diagnostics. The default deployment file now includes /shiftcal/v1 while retaining its legacy rules; production remains untouched.
 
 - Compact timesheet/pencil hours pills, coherent calendar header and six-row layout in normal/Edit modes.
 - Grouped Agenda day cards, compact filters/Event action, tappable event/private alarm rows and cached presentation with assignment colors preserved across themes.
@@ -27,7 +31,7 @@ Completed:
 - Firebase records, permissions, revision conflicts and tombstones.
 - Reusable tap-based selection sheets, working Activity Repeat, conditional recurrence preview, compact timing/assignment/participant workflows, date-aware quick-start templates, quick reassignment with guarded Undo, collapsed agenda dates, one multi-person planner selector and truthful save/sync status.
 
-Latest validation passed: **1,786 focused Unity assertions, 460 play-mode assertions with zero errors, 46 native tests plus lint and 53 Firestore emulator assertions.** Generated 522 UI renders across three themes at 360×640, 393×851 and 412×915. Dense-day checks preserve activity capacity, overflow, notes, alarms, today/selection and all six rows. Real EventSystem tests cover hours save/zero/clear, monthly review/edit, compact Details, private Add Alarm from both day screens, X, Back, selectors, Agenda navigation/rows/filter/Event action and the existing family workflows. Native privacy tests exercise APIs 26, 33 and 35.
+Latest validation passed: **1,974 focused Unity assertions, 599 play-mode assertions with zero errors, 46 native tests, lint with zero errors and three existing dependency warnings, and 77 Firestore emulator assertions.** Generated 738 current-run UI renders across three themes at 360×640, 393×851 and 412×915. Dense-day checks preserve activity capacity, overflow, notes, alarms, today/selection and all six rows. Real EventSystem tests cover display preferences, unscaled long-press and range dragging, optional shift hours, cleanup confirmation/account isolation, hours save/zero/clear, monthly review/edit, selectors, Agenda and existing family workflows. Native privacy tests exercise APIs 26, 33 and 35.
 
 No physical phone was attached (`adb devices -l` returned an empty list), and no configured AVD was available. Real lock-screen rendering and sleeping-device ringing remain unverified. No production Firebase data or rules were modified. Install the newly built APK for these changes; rebuilding an old checkout will not include them.
 
@@ -51,8 +55,8 @@ Limits: planning uses recorded activities and one person's work rotation. Group 
 
    Reconcile divergence on main; do not reset or force-push.
 2. Install **Unity 6000.3.0f1** with Android Build Support, SDK/NDK and OpenJDK. Open `Assets/Calendar.unity`; Play → **Use on this device** checks local functionality. Firebase SDKs, configuration and web client ID are already committed; verify project and signing fingerprints before live login.
-3. Securely copy **`C:/Users/simyr/.android/debug.keystore`**, alias `androiddebugkey`, and adjust Unity's key path if needed. Do not commit or replace it. Verified fingerprints are in [FIREBASE_SETUP.md](FIREBASE_SETUP.md).
-4. Fresh October 15 APK: **`Logs/Android/ShiftCal-ui.apk`**, ARM64, non-development, 33,569,878 bytes (about 32 MiB), verified against the unchanged debug certificate. **Git does not carry the APK, logs/screenshots, signing key or app-private data.** Copy the APK separately or rebuild with `ShiftCalChecks.BuildAndroid`. Personal alarms remain on each phone.
+3. Securely copy **`C:/Users/simyr/.android/debug.keystore`**, alias `androiddebugkey`, and adjust Unity's key path if needed. The user confirmed this PC's **A4:C9…** certificate matches the installed app. Do not commit or replace it. Verified fingerprints are in [FIREBASE_SETUP.md](FIREBASE_SETUP.md).
+4. Fresh October 16 APK: **`Logs/Android/ShiftCal-ui.apk`**, ARM64, non-development, **33,603,106 bytes** (about 32 MiB), package `com.abramnel.shiftcal`, version 1.1.0/code 3, min API 26/target 36. Its verified certificate is **A4:C9:C4:97:18:F8:AF:4D:97:48:8C:43:E3:2B:E2:9C:80:8D:C7:14:20:9E:13:3E:86:74:54:D8:D9:58:1D:17**. APK SHA-256: `BA900C745B6C00E766F3782396C8F0DF1B7FB1FA5CC36514DAE7D14D8721CAF4`. Verification is in `Logs/Android/qol-apk-verification.txt`. **Git does not carry the APK, logs/screenshots, signing key or app-private data.** Copy the APK separately or rebuild with `ShiftCalChecks.BuildAndroid`. Personal alarms remain on each phone.
 
 Use the saved scene; the builder replaces manual scene edits. Checks: `ShiftCalChecks.Run`, `ShiftCalRuntimeChecks.Run`, `Tools/AndroidChecks` and `Tools/FirebaseChecks`.
 

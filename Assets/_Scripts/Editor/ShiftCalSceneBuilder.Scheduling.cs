@@ -28,6 +28,10 @@ public static partial class ShiftCalSceneBuilder
         work.undoButton=Command(agenda,"Undo last skip",work.UndoSkip).gameObject;work.undoButton.SetActive(false);
         var entries=CreateVerticalGroup("Series and rules",agenda,20,0,0,0,0);entries.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         work.agendaContent=entries.transform;work.rowPrefab=BuildScheduleRowPrefab();
+        var history=Command(agenda,"Past / History",work.ToggleHistory);work.historyHeading=history.GetComponentInChildren<Text>();
+        work.historySection=Section(agenda,"Past history");work.historyContent=Section(work.historySection.transform,"Completed definitions").transform;
+        var personalCleanup=Disclosure(work.historySection.transform,"Clean up past personal alarms",work.CleanPersonalHistory);work.cleanupPersonalLabel=personalCleanup.GetComponentInChildren<Text>();
+        work.sharedCleanup=Disclosure(work.historySection.transform,"Delete past calendar history",work.CleanSharedHistory).gameObject;work.cleanupSharedLabel=work.sharedCleanup.GetComponentInChildren<Text>();work.historySection.SetActive(false);
         var upcoming=Command(agenda,"Upcoming  v",work.ToggleUpcoming);work.upcomingLabel=upcoming.GetComponentInChildren<Text>();
         work.upcomingSection=CreateVerticalGroup("Upcoming section",agenda,20,0,0,0,0);work.upcomingSection.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         var occurrences=CreateVerticalGroup("Individual deliveries",work.upcomingSection.transform,20,0,0,0,0);occurrences.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
@@ -103,6 +107,7 @@ public static partial class ShiftCalSceneBuilder
         Command(groupContent,"Conflicts: keep my edits",work.KeepMine);Command(groupContent,"Conflicts: use remote edits",work.UseRemote);
         var backup=Expandable(sharing,"Backup / Restore");Command(backup,"Export shared calendar backup",work.ExportBackup);Command(backup,"Export personal backup (hours & alarms)",work.ExportPersonalBackup);Command(backup,"Import this device's local calendar",work.ImportLocal);
         var advanced=SettingsCard(settingsContent,"Advanced");var utilities=Expandable(advanced,"Sync tools");Command(utilities,"Retry sync",work.Retry);
+        var diagnostics=Expandable(sharing,"Sync details");work.syncDiagnostics=Body(diagnostics,"Cloud diagnostics",-1);work.syncDiagnostics.fontSize=30;work.syncDiagnostics.color=TextMuted;
 
         var loginContent=FindChild(login.transform,"Login Content");
         var local=Command(loginContent,"Use on this device",null);local.name="Local Mode Button";
@@ -205,7 +210,8 @@ public static partial class ShiftCalSceneBuilder
         var row=CreateHorizontalGroup(label+" Row",content,20,0,0,10,10);AddLayoutElement(row,-1,height);
         row.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth=false;
         var text=CreateText(label+" Label",row.transform,label,30,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AddLayoutElement(text.gameObject,0,-1,1);
-        var check=CreateToggle(label,row.transform);AddLayoutElement(check.gameObject,64,64);check.isOn=initial;return check;
+        var check=CreateToggle(label,row.transform);AddLayoutElement(check.gameObject,64,64);check.isOn=initial;
+        var hit=row.AddComponent<Image>();hit.color=Color.clear;hit.raycastTarget=true;var button=row.AddComponent<Button>();button.targetGraphic=hit;button.transition=Selectable.Transition.None;var target=row.AddComponent<ToggleRow>();target.toggle=check;UnityEventTools.AddPersistentListener(button.onClick,target.Flip);return check;
     }
     private static SelectionField Choice(Transform content,string label,string[] values,bool shift=false)
     {
@@ -216,17 +222,19 @@ public static partial class ShiftCalSceneBuilder
         drop.button=root.AddComponent<Button>();drop.button.targetGraphic=root.GetComponent<Image>();UnityEventTools.AddPersistentListener(drop.button.onClick,drop.Open);
         var caption=CreateText("Value",root.transform,values[0],34,TextDark,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(caption.rectTransform,0,0,1,1,24,8,-60,-8);drop.captionText=caption;
         var arrow=CreateImage("Selection affordance",root.transform,Primary);arrow.sprite=NavigationIcon("right");arrow.raycastTarget=false;arrow.preserveAspect=true;AnchorStretch(arrow.rectTransform,1,.5f,1,.5f,-58,-20,-18,20);
-        drop.AddOptions(new List<string>(values));return drop;
+        if(label=="Sound"){
+            drop.heading="Alarm sound";drop.AddOptions(new List<SelectionItem>{new SelectionItem("Device alarm","alarm","Default phone alarm tone"){icon=NavigationIcon("bell")},new SelectionItem("Device notification","notification","Default notification tone"){icon=NavigationIcon("bell")},new SelectionItem("Silent","silent","No audible sound"){icon=NavigationIcon("muted")}});
+        }else drop.AddOptions(new List<string>(values));return drop;
     }
     private static ScheduleListRow BuildScheduleRowPrefab()
     {
-        var obj=CreateVerticalGroup("ScheduleListRow",null,10,24,24,20,20);var image=obj.AddComponent<Image>();image.sprite=Rounded;image.type=Image.Type.Sliced;image.color=CardSoft;
+        var obj=CreateVerticalGroup("ScheduleListRow",null,8,24,24,16,16);var image=obj.AddComponent<Image>();image.sprite=Rounded;image.type=Image.Type.Sliced;image.color=CardSoft;
         obj.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         obj.AddComponent<Button>().targetGraphic=image;
-        var row=obj.AddComponent<ScheduleListRow>();row.title=Body(obj.transform,"Title",-1);row.title.fontSize=42;row.title.fontStyle=FontStyle.Bold;row.subtitle=Body(obj.transform,"Detail",-1);row.subtitle.fontSize=34;
-        var buttons=CreateHorizontalGroup("Actions",obj.transform,14,0,0,0,0);AddLayoutElement(buttons,-1,104);
+        var row=obj.AddComponent<ScheduleListRow>();row.title=Body(obj.transform,"Title",-1);row.title.fontSize=40;row.title.fontStyle=FontStyle.Bold;row.subtitle=Body(obj.transform,"Detail",-1);row.subtitle.fontSize=32;
+        var buttons=CreateHorizontalGroup("Actions",obj.transform,14,0,0,0,0);AddLayoutElement(buttons,-1,132);
         row.first=Command(buttons.transform,"Edit",null);row.second=Command(buttons.transform,"Pause",null);row.third=Command(buttons.transform,"Upcoming",null);
-        foreach(var button in new[]{row.first,row.second,row.third}){AddLayoutElement(button.gameObject,0,104,1);button.GetComponentInChildren<Text>().fontSize=34;}
+        foreach(var button in new[]{row.first,row.second,row.third}){AddLayoutElement(button.gameObject,0,132,1);button.GetComponentInChildren<Text>().fontSize=34;}
         BakeThemes(obj.transform);
         var prefab=PrefabUtility.SaveAsPrefabAsset(obj,PrefabFolder+"/ScheduleListRow.prefab");Object.DestroyImmediate(obj);return prefab.GetComponent<ScheduleListRow>();
     }

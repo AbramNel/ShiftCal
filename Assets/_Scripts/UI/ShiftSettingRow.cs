@@ -16,7 +16,8 @@ namespace ShiftCal.UI
             uiNameLabel.text = addRow ? "+ Add new shift" : data.name;
             uiColorSwatch.gameObject.SetActive(!addRow);
             if (data != null) uiColorSwatch.color = ShiftStyleUtility.ToColor(data.colorHex);
-            uiTimeLabel.text = addRow ? "Choose a name, color and hours" : string.IsNullOrWhiteSpace(data.startTime) ? "No scheduled hours" : data.startTime + " – " + data.endTime + "  •  " + ShiftTimeUtility.FormatHours(data.hours);
+            uiTimeLabel.text = addRow ? "Name, color and optional hours" : string.IsNullOrWhiteSpace(data.startTime) ? "" : data.startTime + " – " + data.endTime + "  •  " + ShiftTimeUtility.FormatHours(data.hours);uiTimeLabel.gameObject.SetActive(!string.IsNullOrEmpty(uiTimeLabel.text));
+            GetComponent<LayoutElement>().preferredHeight=addRow||string.IsNullOrEmpty(uiTimeLabel.text)?132:164;
         }
         public void Edit() => controller.editor.Show(controller, definition);
     }

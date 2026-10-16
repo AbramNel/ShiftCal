@@ -16,6 +16,7 @@ namespace ShiftCal.UI
         public RectTransform card;
         public SelectionSheetRow rowPrefab;
         public Button done;
+        public GameObject actions;
         public SelectionField Owner { get; private set; }
         public bool IsOpen=>gameObject.activeSelf;
         private HashSet<int> staged=new HashSet<int>();
@@ -27,9 +28,10 @@ namespace ShiftCal.UI
             EventSystem.current?.SetSelectedGameObject(null);
             Owner=field;heading.text=field.heading;staged=field.multiple?new HashSet<int>(field.selectedValues):new HashSet<int>{field.value};
             FamilyWorkbench.Clear(content);gameObject.SetActive(true);transform.SetAsLastSibling();
-            GetComponent<ModalPanel>().Close=Cancel;done.gameObject.SetActive(field.multiple);
+            GetComponent<ModalPanel>().Close=Cancel;actions.SetActive(field.multiple);done.gameObject.SetActive(field.multiple);
+            var viewport=(RectTransform)scroll.transform;viewport.offsetMin=new Vector2(viewport.offsetMin.x,field.multiple?162:18);
             var items=field.Items;shown=items.ToList();
-            float desired=320+items.Sum(i=>string.IsNullOrEmpty(i.description)?132:180);card.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,Mathf.Min(desired,((RectTransform)transform).rect.height*.87f));
+            float desired=(field.multiple?310:166)+items.Sum(i=>string.IsNullOrEmpty(i.description)?144:180);card.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,Mathf.Min(desired,((RectTransform)transform).rect.height*.87f));
             for(int i=0;i<items.Count;i++) { int index=i;var row=Instantiate(rowPrefab,content);row.Bind(items[i],staged.Contains(i),()=>Choose(index)); }
             scroll.verticalNormalizedPosition=1;
             fitFrames=2;
@@ -37,7 +39,7 @@ namespace ShiftCal.UI
         void LateUpdate(){if(IsOpen&&fitFrames>0&&--fitFrames==0)FitHeight();}
         public void FitHeight()
         {
-            if(!IsOpen)return;float height=310+LayoutUtility.GetPreferredHeight((RectTransform)content);
+            if(!IsOpen||CanvasUpdateRegistry.IsRebuildingLayout()||CanvasUpdateRegistry.IsRebuildingGraphics())return;float height=(Owner.multiple?310:166)+LayoutUtility.GetPreferredHeight((RectTransform)content);
             card.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,Mathf.Min(height,((RectTransform)transform).rect.height*.87f));
         }
         public void Choose(int index)

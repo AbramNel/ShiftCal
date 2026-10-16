@@ -28,6 +28,7 @@ public static class ShiftCalRuntimeChecks
     }
     public static void Run()
     {
+        PortraitRuntimeView.Begin();
         SessionState.SetBool(Pending, true);
         SessionState.SetBool(Pending+".accountHad", PlayerPrefs.HasKey("ShiftCal.ActiveAccount.v3"));
         SessionState.SetString(Pending+".account", PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3"));
@@ -48,6 +49,7 @@ public static class ShiftCalRuntimeChecks
         if (SessionState.GetBool(Pending+".themeHad", false)) PlayerPrefs.SetInt(ThemeManager.PreferenceKey,SessionState.GetInt(Pending+".theme", 0));else PlayerPrefs.DeleteKey(ThemeManager.PreferenceKey);
         if(SessionState.GetBool(Pending+".alarmHad",false))PlayerPrefs.SetString("ShiftCal.AlarmPreferences.v1",SessionState.GetString(Pending+".alarm",""));else PlayerPrefs.DeleteKey("ShiftCal.AlarmPreferences.v1");
         PlayerPrefs.Save();
+        PortraitRuntimeView.Restore();
         bool passed=SessionState.GetBool(Pending+".passed",false);
         Debug.Log(passed ? "ShiftCal runtime UI checks passed" : "ShiftCal runtime UI checks FAILED");
         EditorApplication.Exit(passed ? 0 : 1);

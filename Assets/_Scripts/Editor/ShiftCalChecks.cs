@@ -41,6 +41,12 @@ public static class ShiftCalChecks
     [MenuItem("ShiftCal/Run Focused Checks")]
     public static void Run()
     {
+        bool had=PlayerPrefs.HasKey(DisplayPreferences.LoggedHoursKey);int value=PlayerPrefs.GetInt(DisplayPreferences.LoggedHoursKey,1);
+        try{DisplayPreferences.ShowLoggedHoursTotal=true;RunInternal();}
+        finally{DisplayPreferences.ShowLoggedHoursTotal=value!=0;if(!had)PlayerPrefs.DeleteKey(DisplayPreferences.LoggedHoursKey);PlayerPrefs.Save();}
+    }
+    private static void RunInternal()
+    {
         checks=0;
         var group=Group();
         Check(ShiftPatternUtility.Resolve(group.pattern,group.startDateKey,new DateTime(2026,7,3))==1,"rotation resolves OFF");
@@ -199,7 +205,7 @@ public static class ShiftCalChecks
         Check(settings.editor.HasChanges&&JsonUtility.ToJson(definition)==before,"shift editor stages changes until Save");settings.editor.gameObject.SetActive(false);
         settings.editor.Show(settings,null);settings.editor.nameInput.text="Custom OFF";settings.editor.Save();
         var custom=session.CurrentGroup.shiftTypes.Last();Check(custom.id>=100&&custom.hours==0&&string.IsNullOrEmpty(custom.startTime),"shift editor saves intentional untimed custom shift");
-        settings.editor.Show(settings,custom);settings.editor.startPicker.Set("5:30 PM");settings.editor.endPicker.Set("5:30 AM");settings.editor.Save();Check(custom.hours==12,"shift editor saves overnight hours");
+        settings.editor.Show(settings,custom);settings.editor.setHours.isOn=true;settings.editor.startPicker.Set("5:30 PM");settings.editor.endPicker.Set("5:30 AM");settings.editor.Save();Check(custom.hours==12,"shift editor saves overnight hours");
         settings.editor.Show(settings,custom);settings.editor.ClearTimes();settings.editor.Save();Check(custom.hours==0&&string.IsNullOrEmpty(custom.startTime)&&string.IsNullOrEmpty(custom.endTime),"clear shift times preserves intentional untimed shifts on every platform");
         session.SetShift("2026-07-05",custom.id);Check(!session.CanDeleteShift(custom.id,out _),"custom shift referenced by date cannot be deleted");session.CalendarOverrides.Remove("2026-07-05");session.CurrentGroup.shiftTypes.Remove(custom);
         foreach(int id in new[]{0,3,4,5,6,7})session.CurrentGroup.shiftTypes.Add(new ShiftTypeDefinitionData{id=id,name=ShiftStyleUtility.GetName(id,null),colorHex=ShiftStyleUtility.GetColorHex(id,null)});
@@ -222,7 +228,7 @@ public static class ShiftCalChecks
         int history=nav.HistoryCount;nav.ShowCalendar();Check(nav.HistoryCount==history,"duplicate navigation suppressed");
         work.NewEvent(future);nav.Register(work.eventPanel.GetComponent<ModalPanel>());work.eventFields[0].text="Unsaved";nav.Back();
         Check(work.eventPanel.activeSelf&&nav.confirmation.gameObject.activeSelf,"Back confirms unsaved editor");nav.confirmation.Cancel();nav.Back();nav.confirmation.Accept();Check(!work.eventPanel.activeSelf,"confirm discard closes editor");
-        work.ShowAgenda();work.Refresh();Check(work.agendaContent.GetComponentsInChildren<ScheduleListRow>().Length==session.Data.events.Count+session.Data.rules.Count,"one main card per series/rule");
+        work.ShowAgenda();work.Refresh();Check(work.agendaContent.GetComponentsInChildren<ScheduleListRow>().Length+work.HistoryCount==session.Data.events.Count+session.Data.rules.Count,"one card per series/rule across active and history");
         work.ToggleUpcoming();Check(work.upcomingContent.GetComponentsInChildren<ScheduleListRow>().Length<=4,"Upcoming starts with at most four occurrences");work.Hide();
         Check(!nav.GetComponentsInChildren<Transform>(true).Any(x=>x.name=="Bottom Navigation"),"no bottom navigation objects remain");
         Check(!nav.GetComponentsInChildren<Dropdown>(true).Any(x=>x.name=="Theme"),"redundant theme dropdown removed");

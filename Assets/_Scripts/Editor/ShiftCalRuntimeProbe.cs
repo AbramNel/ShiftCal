@@ -21,6 +21,7 @@ public class ShiftCalRuntimeProbe
     public IEnumerator Run()
     {
         for(int i=0;i<8;i++)yield return null;
+        Check(Screen.height>Screen.width,"runtime pointer checks use Android portrait viewport");
         var nav=AppNavigation.Instance;var cal=UnityEngine.Object.FindFirstObjectByType<CalendarController>(FindObjectsInactive.Include);
         var work=UnityEngine.Object.FindFirstObjectByType<ScheduleWorkbench>();var settings=UnityEngine.Object.FindFirstObjectByType<ShiftSettingsController>(FindObjectsInactive.Include);
         nav.ShowCalendar();yield return null;nav.ShowSettings();yield return null;
@@ -76,7 +77,8 @@ public class ShiftCalRuntimeProbe
             cal.SetEditing(true);cal.BeginDaySelection(DateKeyUtility.ToDateKey(date));cal.ExtendDaySelection(DateKeyUtility.ToDateKey(date.AddDays(3)));cal.EndDaySelection(DateKeyUtility.ToDateKey(date.AddDays(3)));yield return null;
             cal.OpenShiftPickerForSelection();yield return null;yield return null;
             var choiceScroll=picker.choices.GetComponentInParent<ScrollRect>();
-            Check(choiceScroll.verticalNormalizedPosition>.99f&&picker.choices.GetComponentsInChildren<ShiftChoiceRow>().Length>0,"runtime bulk picker reopens at visible choices");nav.Back();yield return null;nav.Back();yield return null;Check(!cal.IsEditing&&cal.SelectedCount==0,"runtime Back exits edit selection");
+            var firstChoice=picker.choices.GetComponentsInChildren<ShiftChoiceRow>().FirstOrDefault();var visibleCorners=new Vector3[4];if(firstChoice!=null)((RectTransform)firstChoice.transform).GetWorldCorners(visibleCorners);
+            Check(firstChoice!=null&&visibleCorners.All(p=>{float y=choiceScroll.viewport.InverseTransformPoint(p).y;return y>=choiceScroll.viewport.rect.yMin-1&&y<=choiceScroll.viewport.rect.yMax+1;}),"runtime bulk picker reopens with its first choice fully visible");nav.Back();yield return null;nav.Back();yield return null;Check(!cal.IsEditing&&cal.SelectedCount==0,"runtime Back exits edit selection");
             cal.NextMonth();yield return null;cal.PrevMonth();yield return null;nav.ShowSettings();yield return null;
         }
         var family=FamilyRuntimeChecks.Exercise(Check);while(family.MoveNext())yield return null;
@@ -84,6 +86,7 @@ public class ShiftCalRuntimeProbe
         var dayHours=DayAndHoursRuntimeChecks.Run(Check);while(dayHours.MoveNext())yield return null;
         for(int i=0;i<8;i++)yield return null;
         var presentation=PresentationRuntimeChecks.Run(Check);while(presentation.MoveNext())yield return null;
+        var qualityUpdate=QualityUpdateRuntimeChecks.Run(Check);while(qualityUpdate.MoveNext())yield return null;
         Application.logMessageReceived -= Log;
         foreach(var error in errors)Debug.LogWarning("UI runtime failure: "+error);
         Debug.Log("UI runtime assertions: "+checks+"; errors: "+errors.Count);

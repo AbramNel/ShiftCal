@@ -37,7 +37,8 @@ namespace ShiftCal.UI
         }
         void PersonalRows(List<Occurrence> occurrences,long now)
         {
-            foreach(var definition in PersonalAlarmStore.Definitions){var d=definition;var e=d.schedule;var next=occurrences.FirstOrDefault(o=>o.sourceId==e.id&&o.audible&&o.at>now);Row(e.title,"Personal · this device\n"+Cadence(e)+"\n"+(next==null?"No upcoming delivery":"Next: "+DayInformation.Time(next)),"Edit",()=>EditPersonal(d,next?.dateKey??e.dateKey),e.enabled?"Pause":"Resume",()=>{e.enabled=!e.enabled;DeviceCalendarStore.Write();AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(e.id));}
+            var states=AndroidBridge.DeliveryStates().Values;
+            foreach(var definition in PersonalAlarmStore.Definitions){var d=definition;var e=d.schedule;var next=occurrences.FirstOrDefault(o=>o.sourceId==e.id&&o.audible&&o.at>now);var phase=ScheduleLifecycle.Event(Save,e,d.exceptions,states,now);RowTo(Destination(phase),e.title,"Personal · this device · "+phase+"\n"+Cadence(e)+"\n"+(phase==SchedulePhase.Past?"Completed":next==null?"No delivery in the upcoming window":"Next: "+DayInformation.Time(next)),phase==SchedulePhase.Past?"Review":"Edit",()=>EditPersonal(d,next?.dateKey??e.dateKey),phase==SchedulePhase.Past?"":e.enabled?"Pause":"Resume",phase==SchedulePhase.Past?null:(Action)(()=>{e.enabled=!e.enabled;DeviceCalendarStore.Write();AppSession.Instance.SaveLocal();}),"Upcoming",phase==SchedulePhase.Past?null:(Action)(()=>UpcomingFor(e.id)));}
         }
         void EditorSaveLabel(string label){var button=eventPanel.GetComponentsInChildren<Button>(true).First(b=>b.name=="Save Event");button.GetComponentInChildren<Text>().text=label;}
         public void ExportPersonalBackup()

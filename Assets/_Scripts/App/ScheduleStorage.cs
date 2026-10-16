@@ -74,6 +74,7 @@ namespace ShiftCal.App
         public static void Write(ScheduleSave s)
         {
             Validate(s, s.account);
+            RetainLegacyQueue(s);
             string path = PathFor(s.account), temp = path + ".tmp";
             using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
             {
@@ -87,6 +88,16 @@ namespace ShiftCal.App
                 File.Replace(temp,path,validCurrent?path+".previous":path+".corrupt-"+DateTime.UtcNow.Ticks);
             }
             else File.Move(temp, path);
+        }
+        // Preserve obsolete private queue bytes before filtering them from shared saves.
+        // The immutable recovery file remains inside this account's private app storage.
+        public static void RetainLegacyQueue(ScheduleSave s)
+        {
+            var legacy=s.records.FindAll(r=>r.key!=null&&r.key.StartsWith("rule/")&&(r.pending||r.conflict));if(legacy.Count==0)return;
+            string json="["+string.Join(",",legacy.ConvertAll(r=>JsonUtility.ToJson(r)))+"]",suffix;
+            using(var hash=System.Security.Cryptography.SHA256.Create())suffix=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(json))).Replace("-","").Substring(0,32);
+            string path=PathFor(s.account)+".legacy-queue-"+suffix+".json";if(File.Exists(path))return;string temp=path+".tmp";
+            using(var stream=new FileStream(temp,FileMode.Create,FileAccess.Write,FileShare.None)){byte[] bytes=Encoding.UTF8.GetBytes(JsonUtility.ToJson(s,true));stream.Write(bytes,0,bytes.Length);stream.Flush(true);}File.Move(temp,path);
         }
     }
 }

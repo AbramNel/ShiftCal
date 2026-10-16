@@ -21,6 +21,7 @@ namespace ShiftCal.Firebase
         public bool Ready { get; private set; }
         public bool FirebaseEnabled { get; private set; }
         public string ConfigurationError { get; private set; }
+        public string ProjectId {get;private set;}="Not initialized";
 
         private void Awake()
         {
@@ -36,7 +37,7 @@ namespace ShiftCal.Firebase
             {
                 if (!task.IsFaulted && !task.IsCanceled && task.Result == DependencyStatus.Available)
                 {
-                    try{Auth = FirebaseAuth.DefaultInstance;DB = FirebaseFirestore.DefaultInstance;Ready = true;Debug.Log("Firebase Ready");}
+                    try{Auth = FirebaseAuth.DefaultInstance;DB = FirebaseFirestore.DefaultInstance;ProjectId=FirebaseApp.DefaultInstance.Options.ProjectId;Ready = true;Debug.Log("ShiftCal Firebase initialized: project="+ProjectId);}
                     catch(System.Exception ex){ConfigurationError="Firebase configuration required: "+ex.Message;}
                 }
                 else

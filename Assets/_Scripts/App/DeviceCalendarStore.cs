@@ -49,7 +49,7 @@ namespace ShiftCal.App
                 Write();
             }
             // Old queued private records must never be uploaded, applied, or turned into tombstones.
-            s.records.RemoveAll(x=>x.key.StartsWith("rule/"));
+            ScheduleStorage.RetainLegacyQueue(s);s.records.RemoveAll(x=>x.key!=null&&x.key.StartsWith("rule/"));
             Hydrate(s);
         }
         public static void RemapGroup(string oldId,string newId){if(State==null)return;foreach(var r in State.rules)if(r.groupId==oldId)r.groupId=newId;foreach(var a in State.personalAlarms)if(a.groupId==oldId)a.groupId=newId;foreach(var h in State.workedHours)if(h.groupId==oldId)h.groupId=newId;Write();if(AppSession.Instance?.Data!=null)Hydrate(AppSession.Instance.Data);}

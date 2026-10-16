@@ -14,6 +14,11 @@ namespace ShiftCal.UI
         private Color normalColor;
         private Vector2 pressed;
         private bool dragged, presentationPending = true;
+        private bool pointerHeld,holdPending,holdActivated;
+        private int heldPointer;
+        private float heldAt;
+        private Vector2 pointerPosition;
+        private float HoldTolerance=>Screen.dpi>0?Mathf.Clamp(Screen.dpi/160f*10,8,60):Mathf.Max(8,Screen.width/36f);
         private Vector2 fittedSize;
         private System.DateTime shownToday;
         private readonly List<RaycastResult> hits = new List<RaycastResult>();
@@ -28,6 +33,7 @@ namespace ShiftCal.UI
         public bool IsSelected => selectedOutline != null && selectedOutline.enabled;
         public void Bind(CalendarController owner, CalendarDayData data, bool hasAlarm = false)
         {
+            CancelPointer();
             controller = owner; day = data; gameObject.SetActive(day != null); if (day == null) return;
             normalColor = ThemeManager.ShiftColor(day.shiftColorHex);
             uiBackground.color = normalColor;
@@ -50,7 +56,16 @@ namespace ShiftCal.UI
             return text.Length > length ? text.Substring(0, length - 1) + "…" : text;
         }
         private void OnRectTransformDimensionsChange() => presentationPending = true;
-        private void LateUpdate() => FlushPresentation();
+        private void LateUpdate(){CheckHold();FlushPresentation();}
+        private void OnDisable()=>CancelPointer();
+        private void CancelPointer(){pointerHeld=holdPending=holdActivated=false;}
+        private void CheckHold()
+        {
+            if(!pointerHeld||!holdPending||controller==null||day==null)return;
+            if(Vector2.Distance(pressed,pointerPosition)>HoldTolerance||AppNavigation.Instance?.BlocksCalendarGesture==true){holdPending=false;return;}
+            if(Time.unscaledTime-heldAt<.5f)return;
+            holdPending=false;holdActivated=true;controller.HoldDate(day.dateKey);
+        }
         public void FlushPresentation()
         {
             if (CanvasUpdateRegistry.IsRebuildingLayout() || CanvasUpdateRegistry.IsRebuildingGraphics()) return;
@@ -101,21 +116,27 @@ namespace ShiftCal.UI
         }
         public void OnPointerDown(PointerEventData data)
         {
-            if (data.button != PointerEventData.InputButton.Left) return;
+            if (data.button != PointerEventData.InputButton.Left||pointerHeld||AppNavigation.Instance?.BlocksCalendarGesture==true) return;
+            pointerHeld=true;heldPointer=data.pointerId;heldAt=Time.unscaledTime;pointerPosition=data.position;holdPending=controller!=null&&!controller.IsEditing;holdActivated=false;
             pressed = data.position; dragged = false; controller?.gesture?.Begin(data.position);
             if (controller != null && day != null && controller.IsEditing) controller.BeginDaySelection(day.dateKey);
         }
         public void OnPointerUp(PointerEventData data)
         {
-            if (controller == null || day == null || data.button != PointerEventData.InputButton.Left) return;
+            if (!pointerHeld||heldPointer!=data.pointerId||controller == null || day == null || data.button != PointerEventData.InputButton.Left) return;
+            holdPending=false;
+            if(AppNavigation.Instance?.BlocksCalendarGesture==true){controller.gesture?.Cancel();CancelPointer();return;}
             if (controller.IsEditing) controller.EndDaySelection(day.dateKey);
+            else if(holdActivated){}
             else if (controller.gesture?.Finish(data.position)==true) {}
             else if (!dragged && Vector2.Distance(pressed, data.position) < 16) controller.TapDay(day.dateKey);
+            CancelPointer();
         }
-        public void OnBeginDrag(PointerEventData data) => dragged = true;
-        public void OnEndDrag(PointerEventData data) { if (controller != null && controller.IsEditing) controller.EndDaySelection(day.dateKey); }
+        public void OnBeginDrag(PointerEventData data){if(pointerHeld&&heldPointer==data.pointerId){pointerPosition=data.position;dragged=true;if(Vector2.Distance(pressed,data.position)>HoldTolerance)holdPending=false;}}
+        public void OnEndDrag(PointerEventData data) { if (pointerHeld&&heldPointer==data.pointerId) {holdPending=false;if(controller != null && controller.IsEditing)controller.EndDaySelection(day.dateKey);CancelPointer();} }
         public void OnDrag(PointerEventData data)
         {
+            if(!pointerHeld||heldPointer!=data.pointerId)return;pointerPosition=data.position;if(Vector2.Distance(pressed,data.position)>HoldTolerance)holdPending=false;
             dragged = true; if (controller == null || !controller.IsEditing) return;
             hits.Clear(); EventSystem.current.RaycastAll(data, hits);
             foreach (var hit in hits)

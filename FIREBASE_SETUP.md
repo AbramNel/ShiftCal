@@ -31,7 +31,19 @@ No release key was supplied or created. Before updating an existing installed ap
 
 ## Dedicated Firestore namespace
 
-All new cloud data uses /shiftcal/v1. The old firestore.rules and firebase.json are preserved. The implemented schema is in firestore.shiftcal.rules. If the Firebase project serves other apps, merge ONLY the ShiftCal match block and its helper functions into the existing deployed rules, retaining other apps' rules. Do not deploy the old starter rules or replace the whole shared project's rules with the standalone ShiftCal file.
+All new cloud data uses /shiftcal/v1. The default firebase.json points to firestore.rules, which now retains the legacy rules and adds the current ShiftCal namespace/helpers. The dedicated-project version is firestore.shiftcal.rules. If the Firebase project serves other apps, merge ONLY the ShiftCal match block and its helper functions into the authoritative currently deployed rules, retaining every other app's rules. The repository cannot establish that its legacy rules cover everything currently deployed; do not replace a shared project's rules with the standalone ShiftCal file.
+
+The configured project is **shiftcal-c6d39**. Before October 16, the default deployment file omitted /shiftcal/v1 entirely, so deploying it would cause PERMISSION_DENIED for current app paths. This is a suspected cause of the reported phone error. Live rules, device UID and membership have not been confirmed: no phone or Firebase CLI credentials are available here.
+
+Settings → Data & Sharing → Sync details shows the configured project, account match, personal/shared calendar, membership, pending count and last affected operation/path. Access denied is separate from offline connectivity; queued edits and cached calendars are retained. Shared event/history removal and restoration require the owner; members retain ordinary creation/edit rights, overrides and template workflows.
+
+After separately authorizing production deployment, first save the currently deployed policy. For a dedicated ShiftCal project, the explicit command is:
+
+```powershell
+firebase deploy --only firestore:rules --config firebase.shiftcal.deploy.json --project shiftcal-c6d39
+```
+
+For a shared project, merge into its authoritative rules instead, test the merged file, then use that project's existing configuration with `firebase deploy --only firestore:rules --project shiftcal-c6d39`. Verify that project ID before either command. No deployment is performed by building the app or running local emulator checks.
 
 Personal calendar: /shiftcal/v1/users/{uid}/calendar/{record}.
 Legacy alarm backups only: /shiftcal/v1/users/{uid}/records/{record}. The updated app never listens to or writes this collection; wake rules and subscriptions are stored only on this device.
@@ -58,13 +70,13 @@ Android owns a durable device delivery ledger in its private AtomicFile. Unity s
 
 The native queue covers 45 days, up to 128 occurrences, replenishes after each firing and every 12 hours, and rebuilds after reboot, app replacement and clock/zone changes. Ringing stops after 10 minutes. Dismiss stops only the ringing occurrence; Snooze reschedules it with its effective snooze duration. Open Calendar dismisses the specific actively ringing occurrence before launching Unity and preserves simultaneous alarms and future repeats. Open Calendar from a non-ringing upcoming notice preserves its future delivery. Upcoming "Dismiss this alarm" skips only that occurrence. Swiping an upcoming notice does not skip it. Future skip Undo is available in Events & alarms, including after restarting.
 
-Alarm volume, notification channel settings and Do Not Disturb remain under Android control. Force-stopping an app prevents Android delivery until it is launched again. Full-screen presentation requires the relevant Android access; notification Dismiss/Snooze remain available without it.
+Alarm volume, notification channel settings and Do Not Disturb remain under Android control. Force-stopping an app prevents Android delivery until it is launched again. ShiftCal does not request full-screen presentation or show Activities above the keyguard. Native ringing continues while locked; normal device unlock gives access to Dismiss/Snooze and calendar content.
 
 ## Local verification completed
 
-Unity compiled the Firebase-enabled code and passed 974 focused assertions plus 74 family assertions covering shared activities, recurrence scopes, assignments, filters, conflict handling, simulated device alarm isolation, migration/recovery and portrait geometry. Play-mode checks passed 131 assertions with zero errors, including Back confirmation, icon selection, profiles, templates, agenda, planner, gestures and canvas frames. The integrated checks generated 315 Canvas renders across all three themes at 360x640, 393x851 and 412x915. All 24 native JUnit/Robolectric tests passed, including an account-scoped read-only migration test. The isolated demo-shiftcal emulator passed 53 security/revision/tombstone assertions without accessing production data.
+The October 16 update passed 1,974 focused Unity assertions, 599 play-mode assertions with zero errors, 46 native tests and lint with zero errors (three existing dependency warnings). The integrated run generated 738 current-run Canvas renders across all three themes at 360x640, 393x851 and 412x915. Local demo-project emulators passed 77 security/revision/tombstone assertions, including both rules configurations, owner/member permissions, offline pending writes, conflicts and private-data rejection. No production data was accessed. See [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md) for coverage and remaining acceptance.
 
-A non-development ARM64 APK was built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Certificate verification and the APK hash are saved in `Logs/Android/family-apk-verification.txt`. No Android device is attached. Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
+A non-development ARM64 APK is built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Current artifact details are recorded in [HANDOFF.md](HANDOFF.md). No Android device is attached. Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
 
 ## Phone verification later
 

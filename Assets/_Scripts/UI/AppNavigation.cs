@@ -14,6 +14,10 @@ namespace ShiftCal.UI
         private readonly List<ModalPanel> modals = new List<ModalPanel>();
         public GameObject CurrentScreen => history.Count == 0 ? null : history[history.Count - 1];
         public int HistoryCount => history.Count;
+        public bool BlocksCalendarGesture
+        {
+            get { if(CurrentScreen!=calendarScreen)return true;foreach(var modal in modals)if(modal!=null&&modal.gameObject.activeInHierarchy&&modal.GetComponent<DayPreview>()==null)return true;return false; }
+        }
         private void Awake()
         {
             Instance = this;

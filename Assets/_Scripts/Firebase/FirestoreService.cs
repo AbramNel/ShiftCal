@@ -21,10 +21,16 @@ namespace ShiftCal.Firebase
         public bool IsUploading=>uploading;
         public bool HasServerAcknowledgement { get; private set; }
         public bool IsCached { get; private set; }
+        public SyncFailure LastFailure {get;private set;}
+        public string DiagnosticOperation {get;private set;}="";
+        public string DiagnosticPath {get;private set;}="";
+        public string AccessStatus {get;private set;}="Not checked";
+        public string ProjectId=>FirebaseBootstrap.Instance?.ProjectId??"Not initialized";
         private string uploadKey,uploadJson;
         private bool uploadDeleted;
         private long uploadRevision;
         private int generation;
+        private bool accessReady;
 #if SHIFT_CAL_USE_FIREBASE
         private readonly List<ListenerRegistration> listeners = new List<ListenerRegistration>();
         private FirebaseFirestore DB => FirebaseBootstrap.Instance.DB;
@@ -34,6 +40,7 @@ namespace ShiftCal.Firebase
         private DocumentReference Document(string key) => CalendarRecords.Document(key.Replace("/", "~"));
 #endif
         private static bool OwnerKey(string key)=>key.StartsWith("rotation/")||key.StartsWith("shift/")||key.StartsWith("familyProfile/");
+        private static bool OwnerDeletion(string key)=>OwnerKey(key)||key.StartsWith("event/")||key.StartsWith("exception/")||key.StartsWith("activity/")||key.StartsWith("activityException/");
         private void Awake() { if (Instance != null) { Destroy(this); return; } Instance = this; }
         public void TrackChanges(ScheduleSave data)
         {
@@ -48,19 +55,19 @@ namespace ShiftCal.Firebase
             foreach(var x in data.activityExceptions){if(x.replacement!=null)x.replacement.groupId=data.group.groupId;actual["activityException/"+x.id]=JsonUtility.ToJson(x);}
             if(CanManageProfiles) foreach(var x in data.profiles)actual["familyProfile/"+x.id]=JsonUtility.ToJson(x);
             foreach(var x in data.templates)actual["activityTemplate/"+x.id]=JsonUtility.ToJson(x);
-            data.records.RemoveAll(x=>x.key.StartsWith("rule/"));
+            // Retain old queued records for recovery; private/unknown categories never upload.
             foreach (var pair in actual)
             {
                 var record = data.records.Find(r => r.key == pair.Key);
                 if (record == null) { record = new SyncRecord { key=pair.Key }; data.records.Add(record); }
                 if (record.json != pair.Value || record.deleted) { record.json=pair.Value; record.deleted=false; record.pending=true; }
             }
-            foreach (var record in data.records) if (!actual.ContainsKey(record.key) && !record.deleted && (CanManageProfiles || !OwnerKey(record.key))) { record.deleted=true; record.pending=true; }
+            foreach (var record in data.records) if (SyncDiagnostics.SupportedRecord(record.key)&&!actual.ContainsKey(record.key) && !record.deleted && (CanManageProfiles || !OwnerKey(record.key))) { record.deleted=true; record.pending=true; }
         }
         public void StopListening()
         {
-            generation++; uploading=false;uploadKey=null;MemberIds.Clear();MemberLabels.Clear();
-            HasServerAcknowledgement=false;IsCached=false;
+            generation++; uploading=false;accessReady=false;uploadKey=null;MemberIds.Clear();MemberLabels.Clear();
+            HasServerAcknowledgement=false;IsCached=false;AccessStatus="Not checked";
 #if SHIFT_CAL_USE_FIREBASE
             foreach (var l in listeners) l.Stop(); listeners.Clear();
 #endif
@@ -68,10 +75,28 @@ namespace ShiftCal.Firebase
         public void StartListening()
         {
             StopListening();
+            LastFailure=SyncFailure.None;
 #if SHIFT_CAL_USE_FIREBASE
-            if (!Ready) return;
+            if (!Ready){Status=AppSession.Instance.Data.account=="local"?"Saved on this device":"Connect your Google account to resume sharing. Pending edits are saved on this device.";return;}
             int g=generation;
-            if(!AppSession.Instance.CurrentGroup.groupId.StartsWith("local-"))Groups.Document(AppSession.Instance.CurrentGroup.groupId).GetSnapshotAsync().ContinueWithOnMainThread(t=>{if(g==generation&&!t.IsFaulted&&t.Result.Exists){AppSession.Instance.CurrentGroup.ownerUid=t.Result.GetValue<string>("owner");AppSession.Instance.ApplyRemote();}});
+            if(AppSession.Instance.CurrentGroup.groupId.StartsWith("local-")){accessReady=true;AccessStatus="Personal calendar · authenticated account";ListenRecords(g);return;}
+            var group=Groups.Document(AppSession.Instance.CurrentGroup.groupId);var membership=group.Collection("members").Document(AuthService.Instance.UserId);
+            membership.GetSnapshotAsync().ContinueWithOnMainThread(t=>{
+                if(g!=generation)return;
+                if(t.IsFaulted||t.IsCanceled){Fail("verify membership",membership.Path,t.Exception);return;}
+                if(!t.Result.Exists&&!t.Result.Metadata.IsFromCache){AccessStatus="Membership missing";LastFailure=SyncFailure.Membership;Status=SyncDiagnostics.Guidance(LastFailure);return;}
+                AccessStatus=t.Result.Metadata.IsFromCache?"Membership cached · server verification pending":"Authorized group member";
+                group.GetSnapshotAsync().ContinueWithOnMainThread(owner=>{
+                    if(g!=generation)return;if(owner.IsFaulted||owner.IsCanceled){Fail("read calendar owner",group.Path,owner.Exception);return;}
+                    if(owner.Result.Exists){AppSession.Instance.CurrentGroup.ownerUid=owner.Result.GetValue<string>("owner");if(CanManageProfiles)AccessStatus="Calendar owner";AppSession.Instance.ApplyRemote();}
+                    accessReady=true;ListenRecords(g);
+                });
+            });
+#endif
+        }
+#if SHIFT_CAL_USE_FIREBASE
+        void ListenRecords(int g)
+        {
             foreach (var c in new[] { CalendarRecords })
             {
                 listeners.Add(c.Listen(snapshot => {
@@ -86,11 +111,22 @@ namespace ShiftCal.Firebase
                         IsCached=snapshot.Metadata.IsFromCache;HasServerAcknowledgement=!IsCached;
                         Status=AppSession.Instance.Data.records.Any(r=>r.conflict)?"Conflicting edits. Choose Keep mine or Use remote in Options.":snapshot.Metadata.IsFromCache?"Offline / cached calendar":"Synced";
                         Flush();
-                    } catch(Exception ex) { AppSession.Instance.RestoreSnapshot(previous);Status="Sync error; previous calendar retained: "+ex.Message; }
+                    } catch(Exception ex) { AppSession.Instance.RestoreSnapshot(previous);Fail("apply calendar snapshot",c.Path,ex,SyncFailure.InvalidData); }
                 }));
-                listeners[listeners.Count-1].ListenerTask.ContinueWithOnMainThread(t=>{if(g==generation&&t.IsFaulted)Status="Sync listener failed. Local calendar retained. Retry: "+t.Exception.GetBaseException().Message;});
+                listeners[listeners.Count-1].ListenerTask.ContinueWithOnMainThread(t=>{if(g==generation&&(t.IsFaulted||t.IsCanceled))Fail("listen to calendar records",c.Path,t.Exception);});
             }
+        }
 #endif
+        void Fail(string operation,string path,Exception error,SyncFailure? known=null)
+        {
+            var cause=error?.GetBaseException();string code=cause?.Message??"Cancelled";
+#if SHIFT_CAL_USE_FIREBASE
+            if(cause is FirestoreException firestore)code=firestore.ErrorCode.ToString();
+#endif
+            LastFailure=known??SyncDiagnostics.Classify(code);DiagnosticOperation=operation;DiagnosticPath=path;IsCached=LastFailure==SyncFailure.Offline;
+            Status=SyncDiagnostics.Guidance(LastFailure);
+            // Do not log tokens, invitation codes, event JSON, email or exception payloads.
+            Debug.LogWarning("ShiftCal sync: operation="+operation+" path="+path+" category="+LastFailure+" project="+ProjectId+" identityMatches="+(AuthService.Instance?.UserId==AppSession.Instance?.Data?.account)+" access="+AccessStatus+" pending="+(AppSession.Instance?.Data?.records.Count(r=>r.pending)??0));
         }
         public void Merge(string key,string json,bool deleted,long revision)
         {
@@ -136,8 +172,8 @@ namespace ShiftCal.Firebase
         public void Flush()
         {
 #if SHIFT_CAL_USE_FIREBASE
-            if(!Ready||uploading)return;
-            var r=AppSession.Instance.Data.records.Find(x=>x.pending&&!x.conflict&&!x.key.StartsWith("rule/")&&(CanManageProfiles||!OwnerKey(x.key)));if(r==null)return;
+            if(!Ready||!accessReady||uploading)return;
+            var r=AppSession.Instance.Data.records.Find(x=>x.pending&&!x.conflict&&SyncDiagnostics.SupportedRecord(x.key)&&(CanManageProfiles||!OwnerKey(x.key)&&(!x.deleted||!OwnerDeletion(x.key))));if(r==null){if(AppSession.Instance.Data.records.Any(x=>x.pending&&!SyncDiagnostics.SupportedRecord(x.key)))Status="Older edits retained on this device for review. Private alarm records are never uploaded.";else if(!CanManageProfiles&&AppSession.Instance.Data.records.Any(x=>x.pending&&(OwnerKey(x.key)||x.deleted&&OwnerDeletion(x.key))))Status="Sync needs attention · some edits require the calendar owner. They are retained on this device; other authorized edits can still sync.";return;}
             uploading=true;int g=generation;string key=r.key,json=r.json,author=AppSession.Instance.Data.account;bool deleted=r.deleted;long rev=r.revision;
             uploadKey=key;uploadJson=json;uploadDeleted=deleted;uploadRevision=rev;
             var reference=Document(key);
@@ -149,10 +185,10 @@ namespace ShiftCal.Firebase
                 return true;
             }).ContinueWithOnMainThread(t=>{
                 if(g!=generation)return;uploading=false;
-                if(t.IsFaulted||t.IsCanceled){Status="Offline or sync failed. Changes saved locally. Retry: "+t.Exception?.GetBaseException().Message;return;}
+                if(t.IsFaulted||t.IsCanceled){Fail("upload "+key.Split('/')[0],reference.Path,t.Exception);return;}
                 if(!t.Result){Status="Remote edit conflict. Refreshing.";StartListening();return;}
                 r.revision=Math.Max(r.revision,rev+1);if(r.json==json&&r.deleted==deleted)r.pending=false;
-                ScheduleStorage.Write(AppSession.Instance.Data);HasServerAcknowledgement=true;IsCached=false;Status="Synced";Flush();
+                ScheduleStorage.Write(AppSession.Instance.Data);HasServerAcknowledgement=true;IsCached=false;LastFailure=SyncFailure.None;Status="Synced";Flush();
             });
 #endif
         }
@@ -163,7 +199,7 @@ namespace ShiftCal.Firebase
             string uid=AuthService.Instance.UserId;var doc=Groups.Document();int g=generation;
             var batch=DB.StartBatch();batch.Set(doc,new Dictionary<string,object>{{"name",name},{"owner",uid}});
             batch.Set(doc.Collection("members").Document(uid),new Dictionary<string,object>{{"role","owner"},{"name",AuthService.Instance.DisplayName},{"email",FirebaseBootstrap.Instance.Auth.CurrentUser.Email}});
-            batch.CommitAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted){Status=t.Exception.GetBaseException().Message;return;}ArchiveGroup();DeviceCalendarStore.RemapGroup(AppSession.Instance.CurrentGroup.groupId,doc.Id);AppSession.Instance.CurrentGroup.groupId=doc.Id;AppSession.Instance.CurrentGroup.name=name;AppSession.Instance.CurrentGroup.ownerUid=uid;AppSession.Instance.Data.records.RemoveAll(x=>true);AppSession.Instance.SaveLocal();StartListening();});
+            batch.CommitAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted||t.IsCanceled){Fail("create shared calendar",doc.Path,t.Exception);return;}ArchiveGroup();DeviceCalendarStore.RemapGroup(AppSession.Instance.CurrentGroup.groupId,doc.Id);AppSession.Instance.CurrentGroup.groupId=doc.Id;AppSession.Instance.CurrentGroup.name=name;AppSession.Instance.CurrentGroup.ownerUid=uid;AppSession.Instance.Data.records.RemoveAll(x=>true);AppSession.Instance.SaveLocal();StartListening();});
 #else
             Status="Group sharing requires Firebase configuration.";
 #endif
@@ -172,7 +208,7 @@ namespace ShiftCal.Firebase
         {
 #if SHIFT_CAL_USE_FIREBASE
             if(!Ready)return;string group=AppSession.Instance.CurrentGroup.groupId,code=Guid.NewGuid().ToString("N");int g=generation;
-            Groups.Document(group).Collection("invites").Document(code).SetAsync(new Dictionary<string,object>{{"email",email.Trim().ToLowerInvariant()},{"expires",Timestamp.FromDateTime(DateTime.UtcNow.AddDays(7))}}).ContinueWithOnMainThread(t=>{if(g==generation)Status=t.IsFaulted?t.Exception.GetBaseException().Message:"Invitation: "+group+":"+code+" (7 days)";});
+            Groups.Document(group).Collection("invites").Document(code).SetAsync(new Dictionary<string,object>{{"email",email.Trim().ToLowerInvariant()},{"expires",Timestamp.FromDateTime(DateTime.UtcNow.AddDays(7))}}).ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted||t.IsCanceled)Fail("create invitation",Groups.Document(group).Path+"/invites",t.Exception);else Status="Invitation: "+group+":"+code+" (7 days)";});
 #else
             Status="Configure Firebase to invite people.";
 #endif
@@ -184,7 +220,7 @@ namespace ShiftCal.Firebase
             string uid=AuthService.Instance.UserId;int g=generation;
             var member=Groups.Document(parts[0]).Collection("members").Document(uid);
             DB.RunTransactionAsync(async tx=>{var existing=await tx.GetSnapshotAsync(member);if(!existing.Exists)tx.Set(member,new Dictionary<string,object>{{"role","member"},{"invite",parts[1]},{"name",AuthService.Instance.DisplayName},{"email",FirebaseBootstrap.Instance.Auth.CurrentUser.Email}});}).ContinueWithOnMainThread(t=>{
-                if(g!=generation)return;if(t.IsFaulted){Status=t.Exception.GetBaseException().Message;return;}
+                if(g!=generation)return;if(t.IsFaulted||t.IsCanceled){Fail("join calendar",member.Path,t.Exception);return;}
                 ArchiveGroup();var data=AppSession.Instance.Data;data.group.groupId=parts[0];data.group.shiftTypes.Clear();data.overrides.Clear();data.events.Clear();data.exceptions.Clear();data.activities.Clear();data.activityExceptions.Clear();data.profiles.Clear();data.templates.Clear();data.group.shiftOwnerProfileId=null;data.group.ownerUid=null;data.records.RemoveAll(x=>true);AppSession.Instance.ApplyRemote();StartListening();
             });
 #else
@@ -195,13 +231,13 @@ namespace ShiftCal.Firebase
         {
 #if SHIFT_CAL_USE_FIREBASE
             if(!Ready||AppSession.Instance.CurrentGroup.groupId.StartsWith("local-")){Status="Choose a shared group first.";return;}
-            int g=generation;Groups.Document(AppSession.Instance.CurrentGroup.groupId).Collection("members").GetSnapshotAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted){Status=t.Exception.GetBaseException().Message;return;}MemberIds.Clear();MemberLabels.Clear();foreach(var doc in t.Result.Documents){MemberIds.Add(doc.Id);var map=doc.ToDictionary();MemberLabels.Add((map.TryGetValue("name",out var name)?name.ToString():"Member")+(map.TryGetValue("email",out var email)?" / "+email:"")+" ("+map["role"]+")");}Status="Group members refreshed.";});
+            int g=generation;Groups.Document(AppSession.Instance.CurrentGroup.groupId).Collection("members").GetSnapshotAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted||t.IsCanceled){Fail("list members",Groups.Document(AppSession.Instance.CurrentGroup.groupId).Path+"/members",t.Exception);return;}MemberIds.Clear();MemberLabels.Clear();foreach(var doc in t.Result.Documents){MemberIds.Add(doc.Id);var map=doc.ToDictionary();MemberLabels.Add((map.TryGetValue("name",out var name)?name.ToString():"Member")+(map.TryGetValue("email",out var email)?" / "+email:"")+" ("+map["role"]+")");}Status="Group members refreshed.";});
 #endif
         }
         public void RemoveMember(int index)
         {
 #if SHIFT_CAL_USE_FIREBASE
-            if(!Ready||index<0||index>=MemberIds.Count)return;int g=generation;Groups.Document(AppSession.Instance.CurrentGroup.groupId).Collection("members").Document(MemberIds[index]).DeleteAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted){Status="Only the owner can remove another member. Owners cannot remove themselves. "+t.Exception.GetBaseException().Message;return;}Status="Member removed.";RefreshMembers();});
+            if(!Ready||index<0||index>=MemberIds.Count)return;int g=generation;Groups.Document(AppSession.Instance.CurrentGroup.groupId).Collection("members").Document(MemberIds[index]).DeleteAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted||t.IsCanceled){Fail("remove member",Groups.Document(AppSession.Instance.CurrentGroup.groupId).Path+"/members",t.Exception);return;}Status="Member removed.";RefreshMembers();});
 #endif
         }
         public void LeaveGroup()
@@ -209,7 +245,7 @@ namespace ShiftCal.Firebase
 #if SHIFT_CAL_USE_FIREBASE
             if(!Ready||AppSession.Instance.CurrentGroup.groupId.StartsWith("local-"))return;
             string uid=AuthService.Instance.UserId;int g=generation;
-            Groups.Document(AppSession.Instance.CurrentGroup.groupId).Collection("members").Document(uid).DeleteAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted){Status="The group owner cannot leave their own group. "+t.Exception.GetBaseException().Message;return;}
+            Groups.Document(AppSession.Instance.CurrentGroup.groupId).Collection("members").Document(uid).DeleteAsync().ContinueWithOnMainThread(t=>{if(g!=generation)return;if(t.IsFaulted||t.IsCanceled){Fail("leave calendar",Groups.Document(AppSession.Instance.CurrentGroup.groupId).Path+"/members",t.Exception);return;}
                 ArchiveGroup();var s=AppSession.Instance.Data;s.group.groupId="local-default";s.group.name="Personal calendar";s.records.RemoveAll(x=>true);s.events.Clear();s.exceptions.Clear();s.activities.Clear();s.activityExceptions.Clear();s.profiles.Clear();s.templates.Clear();s.group.shiftOwnerProfileId=null;s.group.ownerUid=null;s.overrides.Clear();AppSession.Instance.ApplyRemote();StartListening();Status="Left group. Previous shared calendar retained in local backup.";});
 #endif
         }

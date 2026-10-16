@@ -17,8 +17,8 @@ namespace ShiftCal.UI
         [SerializeField] private Text selectionLabel;
         private string selectionStart;
         private string selectionEnd;
-        private void OnEnable() { if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; ThemeManager.Changed += Refresh; App.WorkedHoursStore.Changed += RefreshHours; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
-        private void OnDisable() { if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; ThemeManager.Changed -= Refresh; App.WorkedHoursStore.Changed -= RefreshHours; SetEditing(false); }
+        private void OnEnable() { App.DisplayPreferences.Changed+=Refresh;if (App.AppSession.Instance != null) { App.AppSession.Instance.Changed += Refresh; ThemeManager.Changed += Refresh; App.WorkedHoursStore.Changed += RefreshHours; if (currentMonth.Year < 2000) currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); Refresh(); } }
+        private void OnDisable() { App.DisplayPreferences.Changed-=Refresh;if (App.AppSession.Instance != null) App.AppSession.Instance.Changed -= Refresh; ThemeManager.Changed -= Refresh; App.WorkedHoursStore.Changed -= RefreshHours; SetEditing(false); }
 
         public DateTime currentMonth;
         public CalendarGestureController gesture;
@@ -40,6 +40,11 @@ namespace ShiftCal.UI
         private void RefreshHours(){Refresh();preview?.RefreshHours();}
         private Dictionary<string, DayInformation> information = new Dictionary<string, DayInformation>();
         public void ToggleEdit() => SetEditing(!IsEditing);
+        public void HoldDate(string key)
+        {
+            if(!visibleDaysByKey.ContainsKey(key))return;
+            gesture?.Cancel();SetEditing(true);BeginDaySelection(key);
+        }
         public void SetEditing(bool editing)
         {
             IsEditing = editing; ClearSelection(); preview?.Hide(); dayDetailsPopup?.Hide();
@@ -115,7 +120,7 @@ namespace ShiftCal.UI
 
             if (uiMonthLabel != null)
                 uiMonthLabel.text = currentMonth.ToString("MMMM yyyy");
-            if(monthlyHours!=null)monthlyPill.SetValue(App.WorkedHoursStore.Format(App.WorkedHoursStore.Total(currentMonth))+"h logged");
+            if(monthlyHours!=null){monthlyPill.SetValue(App.WorkedHoursStore.Format(App.WorkedHoursStore.Total(currentMonth))+"h logged");LayoutMonthHeader();}
 
             for (int i = 0; i < dayCells.Count; i++)
             {
@@ -130,6 +135,17 @@ namespace ShiftCal.UI
             }
 
             UpdateSelectionLabel();
+        }
+        void LayoutMonthHeader()
+        {
+            bool show=App.DisplayPreferences.ShowLoggedHoursTotal;monthlyPill.gameObject.SetActive(show);
+            float collapsed=show?0:64;
+            var month=(RectTransform)monthlyPill.transform.parent.parent;month.offsetMin=new Vector2(month.offsetMin.x,-340+collapsed);
+            monthlyPill.transform.parent.GetComponent<LayoutElement>().preferredHeight=show?196:132;
+            var title=uiMonthLabel.rectTransform;title.anchorMin=new Vector2(0,show?1:0);title.anchorMax=Vector2.one;title.offsetMin=new Vector2(0,show?-60:0);title.offsetMax=Vector2.zero;
+            var tools=(RectTransform)transform.Find("Family filter");if(tools!=null){tools.offsetMin=new Vector2(24,-484+collapsed);tools.offsetMax=new Vector2(-24,-352+collapsed);}
+            var weekdays=(RectTransform)transform.Find("Weekday Row");weekdays.offsetMin=new Vector2(24,-536+collapsed);weekdays.offsetMax=new Vector2(-24,-494+collapsed);
+            var grid=GetComponentInChildren<ResponsiveCalendarGrid>(true);var rect=(RectTransform)grid.transform;rect.offsetMax=new Vector2(rect.offsetMax.x,-544+collapsed);grid.Fit();
         }
 
         public void BeginDaySelection(string dateKey)

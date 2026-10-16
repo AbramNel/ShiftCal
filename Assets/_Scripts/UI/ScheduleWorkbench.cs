@@ -24,6 +24,7 @@ namespace ShiftCal.UI
         public GameObject intervalSection, weekdaySection, endingSection, endingDateSection, countSection, shiftSection,
             beforeSection, timeSection, scopeSection, contextSection, advancedSection, advancedButton, overrideSection, deleteButton;
         public Text editorHeading, intervalLabel, timingPreview;
+        public Text syncDiagnostics;
         public Image linkedSwatch;
         public Text messageLabel, readinessLabel, accountLabel, syncLabel, loginStatus, accountDetailsLabel, accountStateLabel;
         public InputField groupName, inviteEmail, invitation;
@@ -60,6 +61,7 @@ namespace ShiftCal.UI
         private void Update()
         {
             if(Time.unscaledTime<nextRefresh)return;nextRefresh=Time.unscaledTime+2;
+            if(agendaPanel.activeSelf&&listMinute!=DateTime.Now.ToString("yyyyMMddHHmm")){listMinute=DateTime.Now.ToString("yyyyMMddHHmm");Refresh();}
             if(loginStatus!=null)loginStatus.text=AuthService.Instance.Status;
             var auth = AuthService.Instance;
             string identity = string.IsNullOrWhiteSpace(auth.DisplayName) ? "On this device" : auth.DisplayName;
@@ -68,6 +70,7 @@ namespace ShiftCal.UI
             if(accountStateLabel!=null)accountStateLabel.text=(auth.IsSignedIn ? "Google account connected" : auth.LocalMode || AppSession.Instance.Data.account == "local" ? "Local calendar on this device" : auth.HasCachedAccess ? "Offline access to your saved account" : "No Google account connected") + "\n" + auth.Status + "\n" + FirestoreService.Instance.Status;
             if(AppNavigation.Instance!=null){var connect=AppNavigation.Instance.GetComponentsInChildren<Button>(true).FirstOrDefault(x=>x.name=="Connect Google account");if(connect!=null)connect.gameObject.SetActive(!auth.IsSignedIn);}
             if(syncLabel!=null)syncLabel.text=string.Join("\n",new[]{FirestoreService.Instance.Status,AppSession.Instance.Error,ScheduleStorage.Status}.Where(s=>!string.IsNullOrWhiteSpace(s)));
+            if(syncDiagnostics!=null){var fs=FirestoreService.Instance;syncDiagnostics.text="Firebase project: "+fs.ProjectId+"\nCalendar: "+(Save.group.groupId.StartsWith("local-")?"Personal account calendar":"Shared group "+Save.group.groupId)+"\nAccount matches sign-in: "+(auth.UserId==Save.account)+"\nAccess: "+fs.AccessStatus+"\nPending edits: "+Save.records.Count(r=>r.pending)+"\nLast operation: "+fs.DiagnosticOperation+"\nRecord path: "+fs.DiagnosticPath;}
             string signature=string.Join("|",FirestoreService.Instance.MemberLabels);
             if(memberChoice!=null&&signature!=memberSignature){memberSignature=signature;memberChoice.ClearOptions();memberChoice.AddOptions(FirestoreService.Instance.MemberLabels.Count==0?new List<string>{"No members loaded"}:FirestoreService.Instance.MemberLabels);}
             if(readinessLabel!=null&&agendaPanel.activeSelf){readinessLabel.text=AndroidBridge.Readiness();permissionSummary.text=AndroidBridge.Call<string>("permissionSummary")??"Alarm readiness - Android device required";}
@@ -178,6 +181,7 @@ namespace ShiftCal.UI
             {
                 var shift = shiftChoices[linkedShift.value];
                 timingPreview.text = "Follows the resolved " + shift.name + " shift, including date changes.";
+                if(timingMode.value==0&&!ShiftTimeUtility.TryParseTime(shift.startTime,out _))timingPreview.text="Set shift hours for "+shift.name+" in Manage Shifts, or choose Specific time for this alarm.";
                 if (timingMode.value == 0 && ShiftTimeUtility.TryParseTime(shift.startTime,out _))
                     try { var at = RecurrenceEngine.Instant(DateKeyUtility.FromDateKey(eventDate.value),shift.startTime,"device") - beforeShift.Minutes * 60000L;
                         timingPreview.text += "\nFor this shift date: " + DateTimeOffset.FromUnixTimeMilliseconds(at).ToLocalTime().ToString("MMM d, h:mm tt"); } catch (Exception) { }
@@ -222,10 +226,11 @@ namespace ShiftCal.UI
                 else if(editScope.value==1&&old.recurrence!=RecurrenceKind.Once)
                 {
                     DateTime cut=DateKeyUtility.FromDateKey(originalDate);
+                    if(!FirestoreService.Instance.CanManageProfiles&&Save.exceptions.Any(x=>x.seriesId==old.id&&string.CompareOrdinal(x.originalDate,originalDate)>=0))throw new ArgumentException("Ask the calendar owner to change future scope when it moves existing exceptions. Your draft is retained.");
                     int consumed=RecurrenceEngine.Dates(old,DateKeyUtility.FromDateKey(old.dateKey),cut.AddDays(-1),Save).Count();
                     if(old.count>0 && e.count==old.count)e.count=Math.Max(1,old.count-consumed);
                     old.until=DateKeyUtility.ToDateKey(cut.AddDays(-1));
-                    if(cut<=DateKeyUtility.FromDateKey(old.dateKey)){Save.events.Remove(old);Save.exceptions.RemoveAll(x=>x.seriesId==old.id);}
+                    if(cut<=DateKeyUtility.FromDateKey(old.dateKey)){e.id=old.id;Save.events.Remove(old);Save.exceptions.RemoveAll(x=>x.seriesId==old.id);}
                     else Save.exceptions.RemoveAll(x=>x.seriesId==old.id&&string.CompareOrdinal(x.originalDate,originalDate)>=0);
                     Save.events.Add(e);
                 }
@@ -272,6 +277,7 @@ namespace ShiftCal.UI
         private void DeleteEventConfirmed()
         {
             if(personalDefinition!=null){PersonalAlarmStore.Delete(personalDefinition,originalDate,editScope.value);ShowAgenda();return;}
+            if(!FirestoreService.Instance.CanManageProfiles){Message("Ask the calendar owner to remove shared events. Your private alarms are unaffected.");return;}
             var e=Save.events.Find(x=>x.id==editingEvent);if(e==null){ShowAgenda();return;}
             if(editScope.value==0&&e.recurrence!=RecurrenceKind.Once){var ex=Exception(e.id,originalDate);ex.cancelled=true;ex.replacement=null;}
             else if(editScope.value==1&&e.recurrence!=RecurrenceKind.Once&&originalDate!=e.dateKey){e.until=DateKeyUtility.ToDateKey(DateKeyUtility.FromDateKey(originalDate).AddDays(-1));Save.exceptions.RemoveAll(x=>x.seriesId==e.id&&string.CompareOrdinal(x.originalDate,originalDate)>=0);}
@@ -335,6 +341,7 @@ namespace ShiftCal.UI
             if(AppSession.Instance==null||Save==null)return;
             if(!agendaPanel.activeSelf)return;
             foreach(var row in rows) { row.gameObject.SetActive(false); if(Application.isPlaying)Destroy(row.gameObject);else DestroyImmediate(row.gameObject); } rows.Clear();
+            HistoryCount=0;FamilyWorkbench.Clear(historyContent);
             readinessLabel.text=AndroidBridge.Readiness();
             if (permissionSummary != null) permissionSummary.text = AndroidBridge.Call<string>("permissionSummary") ?? "Alarm readiness - Android device required";
             upcomingSection.SetActive(upcomingOpen);
@@ -352,8 +359,8 @@ namespace ShiftCal.UI
                     var next=RecurrenceEngine.EventDates(Save,e,DateTime.Today.AddDays(-1),DateTime.Today.AddYears(2)).FirstOrDefault(x=>x.at>now);
                     string date=next?.dateKey??e.dateKey;
                     bool active=e.enabled&&!Save.mutedEvents.Contains(e.id);
-                    string state=(e.recurrence==RecurrenceKind.Once?"One time":"Repeating")+" • "+(active?"Active":"Paused");
-                    Row(e.title,Cadence(e)+"\n"+(next==null?"No upcoming occurrence":"Next: "+DayInformation.Time(next))+" • "+state,"Edit",()=>EditEvent(e.id,date),active?"Pause":"Resume",()=>{e.enabled=true;if(active)Save.mutedEvents.Add(e.id);else Save.mutedEvents.Remove(e.id);AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(e.id));
+                    var phase=ScheduleLifecycle.Event(Save,e,Save.exceptions,states.Values,now);string state=(e.recurrence==RecurrenceKind.Once?"One time":"Repeating")+" • "+phase;
+                    RowTo(Destination(phase),e.title,Cadence(e)+"\n"+(phase==SchedulePhase.Past?"Completed":next==null?"No delivery in the upcoming window":"Next: "+DayInformation.Time(next))+" • "+state,phase==SchedulePhase.Past?"Review":"Edit",()=>EditEvent(e.id,date),phase==SchedulePhase.Past?"":active?"Pause":"Resume",phase==SchedulePhase.Past?null:(Action)(()=>{e.enabled=true;if(active)Save.mutedEvents.Add(e.id);else Save.mutedEvents.Remove(e.id);AppSession.Instance.SaveLocal();}),"Upcoming",phase==SchedulePhase.Past?null:(Action)(()=>UpcomingFor(e.id)));
                 }
                 foreach(var r in Save.rules.Where(r=>string.IsNullOrEmpty(r.groupId)||r.groupId==Save.group.groupId).ToArray())
                 {
@@ -363,7 +370,7 @@ namespace ShiftCal.UI
                     string shift=Save.group.shiftTypes.Find(x=>x.id==r.shiftType)?.name??"Missing shift";
                     Row(r.label,shift+" shifts"+(r.hasWeekdayConstraint?" · "+string.Join(", ",r.weekdays.Select(i=>System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[i])):"")+" • "+(r.timingMode==ShiftTimingMode.FixedTime?r.fixedTime:r.beforeMinutes+" min before start")+"\n"+(next==null?"No upcoming delivery":"Next: "+DayInformation.Time(next))+" • "+(active?"Active":"Paused"),"Edit",()=>{editingRule=r.id;LoadRule(r);},active?"Pause":"Resume",()=>{r.enabled=true;if(active)Save.mutedRules.Add(r.id);else Save.mutedRules.Remove(r.id);AppSession.Instance.SaveLocal();},"Upcoming",()=>UpcomingFor(r.id));
                 }
-                PersonalRows(occurrences,now);
+                PersonalRows(occurrences,now);ActivityRows(states.Values,now);BindHistory(states.Values,now);
                 if(!upcomingOpen)return;
                 string deliveries=AndroidBridge.Call<string>("specialDeliveries");
                 var special=string.IsNullOrEmpty(deliveries)?new List<Occurrence>():JsonUtility.FromJson<OccurrenceList>(deliveries).items;
@@ -378,7 +385,7 @@ namespace ShiftCal.UI
                     Action edit=()=>{if(o.isEvent&&o.sourceId.StartsWith("activity-")){var family=GetComponent<FamilyWorkbench>();var d=DateKeyUtility.FromDateKey(o.calendarDateKey??o.dateKey);var item=ActivityResolver.Resolve(Save,d,d).FirstOrDefault(x=>"activity-"+x.seriesId==o.sourceId&&x.originalDate==o.dateKey);if(item!=null)family.Details(item);}else if(o.isEvent)EditEvent(o.sourceId,o.dateKey);else{var rule=Save.rules.Find(x=>x.id==o.sourceId);if(rule!=null){editingRule=rule.id;LoadRule(rule,o.dateKey);}}};
                     RowTo(upcomingContent,o.title,DayInformation.Time(o)+(string.IsNullOrEmpty(o.state)?" • Device time":" • "+o.state),view?"Edit":skipped?"Undo skip":ringing?"Dismiss":"Skip",()=>{if(view){edit();return;}AndroidBridge.Action(skipped?"undo":ringing?"dismiss":"skip",o.id);undoId=skipped?null:o.id;Refresh();},ringing?"Snooze":view?"":"Edit",ringing?(Action)(()=>{AndroidBridge.Action("snooze",o.id);Refresh();}):view?null:edit,"",null);
                 }
-            }catch(Exception ex){Message(ex.Message);}
+            }catch(Exception ex){Debug.LogError("ShiftCal schedule list refresh failed: "+ex.GetType().Name+"\n"+ex.StackTrace);Message("Could not refresh this list. Your saved entries are retained.");}
         }
         private static string Cadence(EventSeries e)
         {

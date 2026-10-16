@@ -345,7 +345,7 @@ public static partial class ShiftCalSceneBuilder
         var header=CreateHorizontalGroup("Shift summary",content,18,0,0,0,0);AddLayoutElement(header,-1,70);
         var swatch=CreateImage("Day Details Color",header.transform,Hex("#FBBF24"));swatch.sprite=Rounded;swatch.type=Image.Type.Sliced;AddLayoutElement(swatch.gameObject,64,54);
         var shift=Body(header.transform,"Shift",70);AddLayoutElement(shift.gameObject,0,70,1);
-        var time=Body(content,"Time",58);var hoursRow=CreatePanel("Day actual hours row",content,Color.clear);AddLayoutElement(hoursRow,-1,132);popup.hoursPill=HoursPill(hoursRow.transform,"Hours worked · Add",popup.EditHours,true);AnchorStretch((RectTransform)popup.hoursPill.transform,0,.5f,0,.5f,0,-66,420,66);popup.workedHours=popup.hoursPill.label;var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
+        var time=Body(content,"Time",58);var hoursRow=CreatePanel("Day actual hours row",content,Color.clear);AddLayoutElement(hoursRow,-1,132);popup.hoursPill=HoursPill(hoursRow.transform,"Hours worked · Add",popup.EditHours,true);AnchorStretch((RectTransform)popup.hoursPill.transform,1,.5f,1,.5f,-420,-66,0,66);var hoursRect=(RectTransform)popup.hoursPill.transform;hoursRect.pivot=new Vector2(1,.5f);hoursRect.anchoredPosition=new Vector2(0,hoursRect.anchoredPosition.y);popup.workedHours=popup.hoursPill.label;var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
         var actions=CreateHorizontalGroup("Day quick actions",content,18,0,0,0,0);AddLayoutElement(actions,-1,132);var addEvent=Command(actions.transform,"Add Event",popup.AddEvent);var addAlarm=Command(actions.transform,"Add Alarm",popup.AddAlarm);AddLayoutElement(addEvent.gameObject,0,132,1);AddLayoutElement(addAlarm.gameObject,0,132,1);
         var note=Field(content,"note","Notes",true);
         Command(content,"Change shift",popup.ChangeShift);popup.restoreButton=Command(content,"Restore scheduled shift",popup.Restore);
@@ -547,7 +547,8 @@ public static partial class ShiftCalSceneBuilder
         AddOutline(background.gameObject, Border);
 
         Image check = CreateImage("Checkmark", background.transform, Primary);
-        SetRect(check.rectTransform, Vector2.zero, new Vector2(30, 30));
+        check.sprite=NavigationIcon("check");check.preserveAspect=true;check.raycastTarget=false;background.sprite=Rounded;background.type=Image.Type.Sliced;
+        SetRect(check.rectTransform, Vector2.zero, new Vector2(44, 44));
 
         toggle.targetGraphic = background;
         toggle.graphic = check;

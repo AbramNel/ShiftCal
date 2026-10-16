@@ -15,6 +15,8 @@ using Object=UnityEngine.Object;
 public static class DayAndHoursChecks
 {
     static DateTime D(string key)=>DateKeyUtility.FromDateKey(key);
+    // Keep the dense-day alarm in the future so its badge is still eligible to display.
+    public static string DenseDateKey=>DateKeyUtility.ToDateKey(DateTime.Today.AddDays(1));
     public static void Models(Action<bool,string> check,FamilyWorkbench work)
     {
         var session=AppSession.Instance;var previous=session.Data;var device=DeviceCalendarStore.State;var group=session.CurrentGroup;var overrides=session.CalendarOverrides.ToDictionary(x=>x.Key,x=>x.Value);
@@ -65,13 +67,15 @@ public static class DayAndHoursChecks
             Rect hours=World((RectTransform)cell.workedBadge.transform);check(!hours.Overlaps(World((RectTransform)cell.transform.Find("ShiftName")))&&!hours.Overlaps(World((RectTransform)cell.transform.Find("DayNumber"))),"hours badge has separate geometry from shift/day "+cell.DateKey);
             foreach(var icon in cell.activityIcons.Where(x=>x.transform.parent.gameObject.activeSelf))check(!hours.Overlaps(World((RectTransform)icon.transform.parent)),"hours never overlaps activity icon "+cell.DateKey);
         }
-        var dense=calendar.GetComponentsInChildren<CalendarDayCell>(true).Single(c=>c.DateKey=="2026-10-16");check(dense.workedBadge.activeSelf&&dense.activityIcons.Count(x=>x.transform.parent.gameObject.activeSelf)==2&&dense.activityOverflow.text=="+4","dense badge preserves existing icon capacity and +N");check(dense.transform.Find("Note indicator").gameObject.activeSelf&&dense.transform.Find("Alarm indicator").gameObject.activeSelf&&dense.IsSelected,"dense note/alarm/selection preserved together");
+        var dense=calendar.GetComponentsInChildren<CalendarDayCell>(true).Single(c=>c.DateKey==DenseDateKey);var date=D(DenseDateKey);int count=ActivityResolver.Resolve(AppSession.Instance.Data,date,date).Count;
+        check(count>=6&&dense.workedBadge.activeSelf&&dense.activityIcons.Count(x=>x.transform.parent.gameObject.activeSelf)==2&&dense.activityOverflow.text=="+"+(count-2),"dense badge preserves existing icon capacity and +N");check(dense.transform.Find("Note indicator").gameObject.activeSelf&&dense.transform.Find("Alarm indicator").gameObject.activeSelf&&dense.IsSelected,"dense note/alarm/selection preserved together");
     }
     public static void SeedDense(ScheduleSave data)
     {
         var state=DeviceCalendarStore.State;for(int i=14;i<=20;i++){string key="2026-10-"+i;state.workedHours.RemoveAll(x=>x.groupId==data.group.groupId&&x.dateKey==key);state.workedHours.Add(new WorkedHoursEntry{groupId=data.group.groupId,dateKey=key,hundredths=i==14?0:i==15?800:1175});}
         state.workedHours.Add(new WorkedHoursEntry{groupId=data.group.groupId,dateKey="2026-09-30",hundredths=800});
-        string dense="2026-10-16";for(int i=0;i<6;i++)data.activities.Add(new CalendarActivity{id="dense-"+i,title="Dense event "+i,icon=ActivityIconSet.Ids[i],dateKey=dense,assigneeId=data.profiles[i%data.profiles.Count].id});
+        string dense=DenseDateKey;state.workedHours.RemoveAll(x=>x.groupId==data.group.groupId&&x.dateKey==dense);state.workedHours.Add(new WorkedHoursEntry{groupId=data.group.groupId,dateKey=dense,hundredths=1175});
+        for(int i=0;i<6;i++)data.activities.Add(new CalendarActivity{id="dense-"+i,title="Dense event "+i,icon=ActivityIconSet.Ids[i],dateKey=dense,assigneeId=data.profiles[i%data.profiles.Count].id});
         for(int i=0;i<3;i++)data.activities.Add(new CalendarActivity{id="three-"+i,title="Family plan "+i,icon=ActivityIconSet.Ids[i+4],dateKey="2026-10-17",assigneeId=data.profiles[i%data.profiles.Count].id});
         AppSession.Instance.CalendarOverrides[dense]=new DayOverrideData{dateKey=dense,scheduledShift=true,note="Remember the forms"};data.overrides=AppSession.Instance.CalendarOverrides.Values.ToList();state.personalAlarms.Add(new PersonalAlarmDefinition{groupId=data.group.groupId,schedule=new EventSeries{id="personal-dense",title="Wake Up",dateKey=dense,startTime="04:00",zone="device",alarm=true}});
     }

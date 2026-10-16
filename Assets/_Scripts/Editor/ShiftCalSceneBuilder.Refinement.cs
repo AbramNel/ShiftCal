@@ -54,7 +54,7 @@ public static partial class ShiftCalSceneBuilder
         preview.shift=CreateText("Shift",card.transform,"Shift",40,TextDark,TextAnchor.MiddleLeft,FontStyle.Bold);AnchorStretch(preview.shift.rectTransform,0,1,1,1,96,-216,-328,-156);
         preview.alarmButton=CreateButton("Preview Add Alarm",card.transform,"Add Alarm",Vector2.zero,Vector2.zero,Input,Primary,31);AnchorStretch(preview.alarmButton.GetComponent<RectTransform>(),1,1,1,1,-306,-270,-12,-142);UnityEventTools.AddPersistentListener(preview.alarmButton.onClick,preview.AddAlarm);
         var alarmIcon=CreateImage("Alarm sprite",preview.alarmButton.transform,Primary);alarmIcon.sprite=Icon("Alarm");alarmIcon.raycastTarget=false;AnchorStretch(alarmIcon.rectTransform,0,.5f,0,.5f,12,-22,56,22);preview.alarmButton.GetComponentInChildren<Text>().rectTransform.offsetMin=new Vector2(64,4);
-        preview.hoursPill=HoursPill(card.transform,"Preview hours",preview.EditHours,true);AnchorStretch((RectTransform)preview.hoursPill.transform,0,1,0,1,24,-414,420,-282);preview.workedHours=preview.hoursPill.label;
+        preview.hoursPill=HoursPill(card.transform,"Preview hours",preview.EditHours,true);AnchorStretch((RectTransform)preview.hoursPill.transform,1,1,1,1,-420,-414,-12,-282);var hoursRect=(RectTransform)preview.hoursPill.transform;hoursRect.pivot=new Vector2(1,.5f);hoursRect.anchoredPosition=new Vector2(-12,hoursRect.anchoredPosition.y);preview.workedHours=preview.hoursPill.label;
         preview.shiftTime=CreateText("Preview shift time",card.transform,"",32,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);AnchorStretch(preview.shiftTime.rectTransform,0,1,1,1,28,-274,-328,-226);
         var content=CreateScrollContent("Preview details",card.transform,0,28,28,4,4,out var scroll);preview.scroll=scroll.GetComponent<RectTransform>();AnchorStretch(preview.scroll,0,0,1,1,0,148,0,-430);
         preview.details=Body(content,"Details",100);var layout=preview.details.GetComponent<LayoutElement>();layout.preferredHeight=-1;
@@ -79,9 +79,9 @@ public static partial class ShiftCalSceneBuilder
             UnityEventTools.AddStringPersistentListener(button.onClick,editor.Color,hex);
         }
         editor.swatch=CreateImage("Chosen color",content,Hex("#FBBF24"));editor.swatch.sprite=Rounded;editor.swatch.type=Image.Type.Sliced;AddLayoutElement(editor.swatch.gameObject,-1,34);
-        Body(content,"Shift times (optional)",48);var times=CreateHorizontalGroup("Shift time pickers",content,18,0,0,0,0);AddLayoutElement(times,-1,120);editor.startPicker=Picker(times.transform,"Shift start",false,true);editor.endPicker=Picker(times.transform,"Shift end",false,true);AddLayoutElement(editor.startPicker.gameObject,0,120,1);AddLayoutElement(editor.endPicker.gameObject,0,120,1);editor.timeError=ErrorText(content);
-        editor.hours=Body(content,"Calculated hours",64);
-        Command(content,"Clear shift times",editor.ClearTimes);
+        editor.setHours=Check(content,"Set shift hours",false,132);UnityEventTools.AddPersistentListener(editor.setHours.onValueChanged,editor.SetHours);
+        editor.timeFields=Section(content,"Scheduled shift hours");var times=CreateHorizontalGroup("Shift time pickers",editor.timeFields.transform,18,0,0,0,0);AddLayoutElement(times,-1,132);editor.startPicker=Picker(times.transform,"Shift start",false);editor.endPicker=Picker(times.transform,"Shift end",false);AddLayoutElement(editor.startPicker.gameObject,0,132,1);AddLayoutElement(editor.endPicker.gameObject,0,132,1);editor.timeError=ErrorText(content);
+        editor.hours=Body(editor.timeFields.transform,"Calculated hours",64);
         Command(content,"Advanced color",editor.ToggleAdvanced);
         editor.advanced=CreateVerticalGroup("Custom hex color",content,8,0,0,0,0);editor.advanced.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         editor.colorInput=Field(editor.advanced.transform,"shiftColor","Custom color (#FBBF24)");editor.colorError=ErrorText(editor.advanced.transform);
@@ -100,7 +100,7 @@ public static partial class ShiftCalSceneBuilder
         var overlay=CreatePanel("Confirmation",parent,Hex("#000000AA"));Stretch(overlay.GetComponent<RectTransform>());overlay.GetComponent<Image>().raycastTarget=true;overlay.AddComponent<ModalPanel>();
         var dialog=overlay.AddComponent<ConfirmationDialog>();var card=CreateVerticalGroup("Confirmation card",overlay.transform,24,32,32,32,32);var image=card.AddComponent<Image>();image.sprite=Rounded;image.type=Image.Type.Sliced;image.color=Card;image.raycastTarget=true;
         AnchorStretch(card.GetComponent<RectTransform>(),0,.5f,1,.5f,48,-180,-48,180);
-        dialog.message=Body(card.transform,"Discard unsaved changes?",120);
+        card.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;dialog.message=Body(card.transform,"Discard unsaved changes?",-1);dialog.message.GetComponent<LayoutElement>().minHeight=120;
         var actions=CreateHorizontalGroup("Confirm actions",card.transform,18,0,0,0,0);AddLayoutElement(actions,-1,132);
         var cancel=Command(actions.transform,"Cancel",dialog.Cancel);var accept=Command(actions.transform,"Confirm",dialog.Accept);AddLayoutElement(cancel.gameObject,0,-1,1);AddLayoutElement(accept.gameObject,0,-1,1);
         overlay.SetActive(false);return dialog;
@@ -135,6 +135,8 @@ public static partial class ShiftCalSceneBuilder
             sample.selectedBorder=CreateImage("Selected theme",preview.transform,Primary);sample.selectedBorder.sprite=SelectionFrame;sample.selectedBorder.type=Image.Type.Sliced;sample.selectedBorder.raycastTarget=false;Stretch(sample.selectedBorder.rectTransform);
             sample.Refresh();
         }
+        var display=SettingsCard(content,"Display");var displayPanel=display.gameObject.AddComponent<DisplaySettingsPanel>();displayPanel.loggedHours=Check(display,"Show logged-hours total",true,132);UnityEventTools.AddPersistentListener(displayPanel.loggedHours.onValueChanged,displayPanel.SetLoggedHours);
+        var displayDescription=Body(display,"Show your monthly recorded-hours total above the calendar.",-1);displayDescription.fontSize=30;displayDescription.color=TextMuted;Disclosure(display,"Review monthly hours",displayPanel.ReviewMonthlyHours);
         var calendar=SettingsCard(content,"Calendar");
         Disclosure(calendar,"Manage Shifts",null);Disclosure(calendar,"Events & Alarms",null);
         var account=SettingsCard(content,"Account");
@@ -153,10 +155,11 @@ public static partial class ShiftCalSceneBuilder
     }
     private static Button Disclosure(Transform parent,string title,UnityEngine.Events.UnityAction action)
     {
-        var button=Command(parent,title+"  >",action);button.name=title;
+        var button=Command(parent,title,action);button.name=title;
         button.GetComponentInChildren<Text>().alignment=TextAnchor.MiddleLeft;
-        AnchorStretch(button.GetComponentInChildren<Text>().rectTransform,0,0,1,1,24,0,-18,0);
-        AddLayoutElement(button.gameObject,-1,144);return button;
+        AnchorStretch(button.GetComponentInChildren<Text>().rectTransform,0,0,1,1,24,0,-76,0);
+        var arrow=CreateImage("Disclosure chevron",button.transform,Primary);arrow.sprite=NavigationIcon("right");arrow.raycastTarget=false;AnchorStretch(arrow.rectTransform,1,.5f,1,.5f,-58,-20,-18,20);
+        AddLayoutElement(button.gameObject,-1,132);return button;
     }
     private static void ModalHeader(Transform card,string title,ModalPanel modal)
     {

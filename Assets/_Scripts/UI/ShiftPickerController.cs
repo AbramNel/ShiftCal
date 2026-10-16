@@ -115,7 +115,7 @@ namespace ShiftCal.UI
             }
             var current = ResolveDay(FocusedDate);
             dateLabel.text = FocusedDate.ToString("dddd, MMMM d, yyyy");
-            currentShift.text = "Current shift: " + current.shiftName + (string.IsNullOrWhiteSpace(current.startTime) ? " · No scheduled hours" : " · " + current.startTime + "–" + current.endTime);
+            currentShift.text = "Current shift: " + current.shiftName + (string.IsNullOrWhiteSpace(current.startTime) ? "" : " · " + current.startTime + "–" + current.endTime);
             scopeLabel.text = IsBulk ? "Apply to " + selectedDates.Count + " selected days · dates below are a preview" : "Apply to the focused day";
             repeat.gameObject.SetActive(IsBulk);
             feedback.rectTransform.offsetMax = new Vector2(IsBulk ? -270 : -32, feedback.rectTransform.offsetMax.y);

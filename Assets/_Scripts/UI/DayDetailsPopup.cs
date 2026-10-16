@@ -32,7 +32,7 @@ namespace ShiftCal.UI
             originalNote = day.note ?? "";
             noteInput.text = originalNote;
             titleLabel.text = day.date.ToString("dddd, MMM d, yyyy"); shiftLabel.text = day.shiftName;
-            timeLabel.text = string.IsNullOrWhiteSpace(day.startTime) ? "No scheduled hours" : day.startTime + " – " + day.endTime;
+            timeLabel.text = string.IsNullOrWhiteSpace(day.startTime) ? "" : day.startTime + " – " + day.endTime;timeLabel.gameObject.SetActive(!string.IsNullOrEmpty(timeLabel.text));
             colorSwatch.color = ShiftStyleUtility.ToColor(day.shiftColorHex);RefreshHours();RefreshRestore();
             if (info == null) { var data = DayInformation.Resolve(App.AppSession.Instance.Data, day.date, day.date); info = data.TryGetValue(day.dateKey, out var value) ? value : new DayInformation(); }
             RefreshEntries(info);
@@ -74,7 +74,7 @@ namespace ShiftCal.UI
             var date = selected.date;
             selected = CalendarGenerator.Generate(new System.DateTime(date.Year, date.Month, 1), App.AppSession.Instance.CurrentGroup, App.AppSession.Instance.CalendarOverrides).Find(d => d.dateKey == selected.dateKey);
             shiftLabel.text = selected.shiftName;
-            timeLabel.text = string.IsNullOrWhiteSpace(selected.startTime) ? "No scheduled hours" : selected.startTime + " – " + selected.endTime;
+            timeLabel.text = string.IsNullOrWhiteSpace(selected.startTime) ? "" : selected.startTime + " – " + selected.endTime;timeLabel.gameObject.SetActive(!string.IsNullOrEmpty(timeLabel.text));
             colorSwatch.color = ShiftStyleUtility.ToColor(selected.shiftColorHex);RefreshRestore();RefreshHours();
         }
         void RefreshRestore(){restoreButton.gameObject.SetActive(selected!=null&&App.AppSession.Instance.CalendarOverrides.TryGetValue(selected.dateKey,out var value)&&!value.scheduledShift);}

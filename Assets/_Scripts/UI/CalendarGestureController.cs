@@ -7,6 +7,7 @@ namespace ShiftCal.UI
         Vector2 start;
         float at;
         bool tracking;
+        public void Cancel()=>tracking=false;
         public void Begin(Vector2 position){start=position;at=Time.unscaledTime;tracking=!calendar.IsEditing;}
         public bool Finish(Vector2 position)
         {

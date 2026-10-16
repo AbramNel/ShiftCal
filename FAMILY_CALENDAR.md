@@ -1,6 +1,6 @@
 # Family calendar implementation
 
-The October 14 [day, personal alarm and worked-hours update](DAY_ALARMS_HOURS.md) supersedes the older day/add-entry wording below and records the latest validation. The family data and migration design described here remains in place.
+The October 16 [quality-of-life update](QUALITY_OF_LIFE.md) records current behavior and validation. The October 14 [day, personal alarm and worked-hours update](DAY_ALARMS_HOURS.md) supersedes the older day/add-entry wording below. The family data and migration design described here remains in place.
 
 All work is on `main`. `Assets/Calendar.unity`, editable row prefabs, and the icon assets are committed. The permanent scene builder reproduces the wiring.
 
@@ -64,7 +64,7 @@ For a project exclusively dedicated to ShiftCal, `firebase.shiftcal.deploy.json`
 firebase deploy --only firestore:rules --config firebase.shiftcal.deploy.json --project ACTUAL_PROJECT_ID
 ```
 
-The original `firestore.rules` and `firebase.json` are retained and are not the new family schema's deployment target. Deploy the updated rules before expecting family records to sync.
+The default `firebase.json` now targets a merged `firestore.rules`: the legacy match blocks are retained and the ShiftCal namespace/helpers are included. The dedicated-project configuration still targets `firestore.shiftcal.rules`. Preserve all authoritative live rules when sharing a Firebase project; the repository's legacy blocks may not represent every deployed app. Deploy the reviewed updated rules before expecting family records to sync. See [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md) for the permission diagnosis and owner-only shared-history removal policy.
 
 ## Implementation files
 
@@ -78,7 +78,7 @@ The original `firestore.rules` and `firebase.json` are retained and are not the 
 
 ## Validation and practical limits
 
-Latest validation passed 1,030 focused Unity assertions plus 94 family/usability assertions, 298 play-mode assertions with zero errors, 24 native JUnit/Robolectric tests, and 53 Firebase emulator assertions. Android lint reported 0 errors and 5 non-blocking warnings. The integrated run generated 369 portrait Canvas renders, including 144 family/editor/sheet views.
+The original family-update validation passed 1,030 focused Unity assertions plus 94 family/usability assertions, 298 play-mode assertions with zero errors, 24 native JUnit/Robolectric tests, and 53 Firebase emulator assertions. Android lint reported 0 errors and 5 non-blocking warnings. That run generated 369 portrait Canvas renders, including 144 family/editor/sheet views. See [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md) for the current integrated results.
 
 Development checks caught the disabled selector raycast targets, an old all-dates agenda expectation, a Windows importer file lock during optional YAML cleanup, an Undo fingerprint affected by canceled exceptions, and missing-profile draft-return lifecycle bugs. These were corrected and the final focused/runtime suites passed. No outstanding automated-test failures remain. Real pointer tests include Repeat → Weekly → Monday/Wednesday → Save → Reopen, Me/participants, quick occurrence reassignment/Undo, profile color swatches, sound/snooze sheets, calendar filters, Back cancellation, Add Activity → saved template on the chosen date, and profile-route draft preservation.
 

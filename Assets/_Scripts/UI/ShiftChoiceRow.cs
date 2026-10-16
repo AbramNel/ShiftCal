@@ -14,7 +14,8 @@ namespace ShiftCal.UI
         {
             swatch.color = ShiftStyleUtility.ToColor(shift.colorHex);
             title.text = shift.name;
-            time.text = string.IsNullOrWhiteSpace(shift.startTime) ? "No scheduled hours" : shift.startTime + " – " + shift.endTime;
+            time.text = string.IsNullOrWhiteSpace(shift.startTime) ? "" : shift.startTime + " – " + shift.endTime;time.gameObject.SetActive(!string.IsNullOrEmpty(time.text));
+            GetComponent<LayoutElement>().preferredHeight=string.IsNullOrEmpty(time.text)?132:164;
             button.onClick.RemoveAllListeners(); button.onClick.AddListener(() => apply());
         }
     }

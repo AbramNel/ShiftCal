@@ -147,8 +147,13 @@ namespace ShiftCal.UI
             if(!ActivityResolver.Validate(a,out string error)){message.text=error;return;}
             if(templateEditingId!=null){if(string.IsNullOrWhiteSpace(templateName.text)){message.text="Name the template.";return;}templates.UpdateDraft(templateEditingId,templateWasShared,new ActivityTemplate{id=templateEditingId,name=templateName.text.Trim(),activity=a},sharedTemplate.isOn);panel.SetActive(false);return;}
             a.groupId=Save.group.groupId;a.creatorUid=model.creatorUid??Save.account;a.createdAt=model.createdAt>0?model.createdAt:DateKeyUtility.UnixMsNow();a.updatedAt=DateKeyUtility.UnixMsNow();
-            ActivityResolver.SaveEdit(Save,a,seriesId,original,scope.value);
-            if(seriesId!=null&&scope.value==1&&a.id!=seriesId)DeviceCalendarStore.SplitSubscriptions("activity-"+seriesId,"activity-"+a.id,original);
+            int savedScope=scope.value;
+            if(seriesId!=null&&savedScope==1&&!Firebase.FirestoreService.Instance.CanManageProfiles){
+                if(Save.activityExceptions.Any(x=>x.seriesId==seriesId&&string.CompareOrdinal(x.originalDate,original)>=0)){message.text="Ask the calendar owner to change future scope when it moves existing exceptions. Your draft is retained.";return;}
+                if(string.CompareOrdinal(original,Save.activities.Find(x=>x.id==seriesId)?.dateKey)<=0)savedScope=2;
+            }
+            ActivityResolver.SaveEdit(Save,a,seriesId,original,savedScope);
+            if(seriesId!=null&&savedScope==1&&a.id!=seriesId)DeviceCalendarStore.SplitSubscriptions("activity-"+seriesId,"activity-"+a.id,original);
             string source="activity-"+(scope.value==0&&seriesId!=null?seriesId:a.id);string occurrence=seriesId!=null&&scope.value==0&&Save.activities.Find(x=>x.id==seriesId)?.recurrence!=RecurrenceKind.Once?original:null;
             if(timing.value==1||timing.value!=initialTiming&&originalAlarm!=null)
             {
@@ -157,7 +162,7 @@ namespace ShiftCal.UI
             }
             AppSession.Instance.SaveLocal();if(!string.IsNullOrEmpty(AppSession.Instance.Error)){message.text=AppSession.Instance.Error;return;}panel.SetActive(false);workbench.Refresh();
         }
-        public void Delete()=>AppNavigation.Instance.Confirm("Delete this event in the selected scope?",()=>{ActivityResolver.Delete(Save,seriesId,original,scope.value);AppSession.Instance.SaveLocal();panel.SetActive(false);workbench.Refresh();});
+        public void Delete(){if(!Firebase.FirestoreService.Instance.CanManageProfiles){message.text="Ask the calendar owner to remove shared events. You can still edit their details.";return;}AppNavigation.Instance.Confirm("Delete this event in the selected scope?",()=>{if(!Firebase.FirestoreService.Instance.CanManageProfiles)return;ActivityResolver.Delete(Save,seriesId,original,scope.value);AppSession.Instance.SaveLocal();panel.SetActive(false);workbench.Refresh();});}
         public void SaveTemplate()
         {
             if(string.IsNullOrWhiteSpace(templateName.text)){message.text="Name the template.";return;}var a=Read();if(!ActivityResolver.Validate(a,out var error)){message.text=error;return;}

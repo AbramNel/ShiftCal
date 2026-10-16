@@ -21,7 +21,7 @@ public static partial class ShiftCalSceneBuilder
         work.agendaFilter=InlineChoice(tools.transform,"Show events",NavigationIcon("filter"));var add=Command(tools.transform,"Event",work.NewAgendaEvent);AddLayoutElement(add.gameObject,270,132);add.GetComponentInChildren<Text>().rectTransform.offsetMin=new Vector2(64,4);
         var plus=CreateImage("Add event icon",add.transform,Primary);plus.sprite=NavigationIcon("plus");plus.raycastTarget=false;AnchorStretch(plus.rectTransform,0,.5f,0,.5f,22,-20,62,20);
         var options=CreatePanel("Agenda date options",work.agendaPanel.transform,Color.clear);AnchorStretch(options.GetComponent<RectTransform>(),0,1,1,1,32,-450,-32,-318);
-        work.showAllDates=Check(options.transform,"Show all dates",false,132);Stretch(work.showAllDates.transform.parent.GetComponent<RectTransform>());var row=work.showAllDates.transform.parent.gameObject;var click=row.AddComponent<Button>();var hit=row.AddComponent<Image>();hit.color=Color.clear;hit.raycastTarget=true;click.targetGraphic=hit;UnityEventTools.AddPersistentListener(click.onClick,work.ToggleDates);
+        work.showAllDates=Check(options.transform,"Show all dates",false,132);Stretch(work.showAllDates.transform.parent.GetComponent<RectTransform>());
         work.agendaContent=CreateScrollContent("Agenda days",work.agendaPanel.transform,18,24,24,12,24,out var scroll);AnchorStretch(scroll.GetComponent<RectTransform>(),0,0,1,1,0,12,0,-462);
         work.dayCardPrefab=BuildAgendaDayCard();work.alarmIcon=Icon("Alarm");work.eventIcon=NavigationIcon("calendar");work.agendaPanel.SetActive(false);
     }
