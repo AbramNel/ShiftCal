@@ -19,6 +19,9 @@ import java.util.*;
 import java.util.concurrent.Executor;
 
 public final class NativeBridge {
+    public static String calendarImageDirectory(Activity a){return CalendarImageBridge.directory(a);}
+    public static String shareCalendarImage(Activity a,String path,String name,String token){return CalendarImageBridge.share(a,path,name,token);}
+    public static String saveCalendarImage(Activity a,String path,String name,String token){return CalendarImageBridge.save(a,path,name,token);}
     private static final Object PICKER_LOCK=new Object();
     private static Dialog picker;
     private static String pickerToken="";

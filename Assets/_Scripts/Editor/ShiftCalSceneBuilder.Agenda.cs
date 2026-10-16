@@ -39,7 +39,21 @@ public static partial class ShiftCalSceneBuilder
     static void CreateCalendarTools(FamilyWorkbench work,GameObject calendar)
     {
         var tools=CreateHorizontalGroup("Family filter",calendar.transform,16,0,0,0,0);AnchorStretch(tools.GetComponent<RectTransform>(),0,1,1,1,24,-484,-24,-352);
-        work.filter=InlineChoice(tools.transform,"Show events",NavigationIcon("filter"));var agenda=Command(tools.transform,"Agenda",work.ShowAgenda);AddLayoutElement(agenda.gameObject,270,132);agenda.GetComponentInChildren<Text>().rectTransform.offsetMin=new Vector2(72,4);
+        work.filter=InlineChoice(tools.transform,"Show events",NavigationIcon("filter"));
+        work.filter.captionText.horizontalOverflow=HorizontalWrapMode.Wrap;work.filter.captionText.resizeTextForBestFit=true;work.filter.captionText.resizeTextMinSize=28;work.filter.captionText.resizeTextMaxSize=36;
+        var exporter=GameObject.Find("Systems").AddComponent<CalendarImageExporter>();exporter.calendar=work.calendar;
+        exporter.font=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");exporter.rounded=Rounded;exporter.frame=SelectionFrame;exporter.note=Icon("Note");
+        var sharing=CreateHorizontalGroup("Calendar sharing",tools.transform,4,0,0,0,0);AddLayoutElement(sharing,360,132);
+        exporter.shareButton=Command(sharing.transform,"Share",exporter.Share);AddLayoutElement(exporter.shareButton.gameObject,224,132);exporter.shareButton.GetComponentInChildren<Text>().rectTransform.offsetMin=new Vector2(64,4);
+        var shareIcon=CreateImage("Share calendar icon",exporter.shareButton.transform,Primary);shareIcon.sprite=NavigationIcon("share");shareIcon.raycastTarget=false;AnchorStretch(shareIcon.rectTransform,0,.5f,0,.5f,16,-24,64,24);
+        exporter.optionsButton=Command(sharing.transform,"Calendar image options",exporter.OpenOptions);AddLayoutElement(exporter.optionsButton.gameObject,132,132);exporter.optionsButton.GetComponentInChildren<Text>().text="";
+        var more=CreateImage("Image options icon",exporter.optionsButton.transform,Primary);more.sprite=NavigationIcon("down");more.raycastTarget=false;AnchorStretch(more.rectTransform,.5f,.5f,.5f,.5f,-20,-20,20,20);
+        exporter.options=StandaloneSelection(work.transform,"Calendar image",new[]{"Share calendar","Save image"});exporter.options.options[0].icon=NavigationIcon("share");exporter.options.options[1].icon=NavigationIcon("save");
+        exporter.options.options[0].description="Send the displayed month";exporter.options.options[1].description="Keep a copy on your phone";UnityEventTools.AddPersistentListener(exporter.options.onValueChanged,exporter.Choose);
+        exporter.statusPanel=CreatePanel("Calendar image status",work.transform,Card);exporter.statusPanel.GetComponent<Image>().sprite=Rounded;exporter.statusPanel.GetComponent<Image>().type=Image.Type.Sliced;AnchorStretch(exporter.statusPanel.GetComponent<RectTransform>(),0,0,1,0,48,190,-48,356);
+        var statusGroup=exporter.statusPanel.AddComponent<CanvasGroup>();statusGroup.blocksRaycasts=false;statusGroup.interactable=false;
+        exporter.statusLabel=CreateText("Calendar image message",exporter.statusPanel.transform,"",36,TextDark,TextAnchor.MiddleCenter,FontStyle.Normal);AnchorStretch(exporter.statusLabel.rectTransform,0,0,1,1,24,12,-24,-12);exporter.statusPanel.SetActive(false);
+        var agenda=Command(tools.transform,"Agenda",work.ShowAgenda);AddLayoutElement(agenda.gameObject,270,132);agenda.GetComponentInChildren<Text>().rectTransform.offsetMin=new Vector2(72,4);
         var icon=CreateImage("Agenda icon",agenda.transform,Primary);icon.sprite=NavigationIcon("agenda");icon.raycastTarget=false;AnchorStretch(icon.rectTransform,0,.5f,0,.5f,18,-22,62,22);
         AnchorStretch(FindChild(calendar.transform,"Month Bar").GetComponent<RectTransform>(),0,1,1,1,24,-340,-24,-144);
         AnchorStretch(FindChild(calendar.transform,"Weekday Row").GetComponent<RectTransform>(),0,1,1,1,24,-536,-24,-494);

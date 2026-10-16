@@ -1,5 +1,7 @@
 # Quality-of-life update — October 16, 2026
 
+This report describes the completed quality-of-life update. [Calendar image export](CALENDAR_IMAGE_EXPORT.md) records the subsequent feature, latest validation and current APK verification.
+
 Implemented directly in the existing `main` checkout, starting at `f3f232a45dc93585020f5013fd0ddc5d5ac8f4c4`. The saved scene, prefabs, sprites and permanent scene builder are integrated; no manual scene wiring is needed.
 
 ## Calendar and display

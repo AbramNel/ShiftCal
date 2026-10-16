@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries><intent><action android:name="android.intent.action.SEND" /><data android:mimeType="image/png" /></intent></queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -22,5 +23,6 @@
         </receiver>
         <service android:name="com.abramnel.shiftcal.RingingService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
         <activity android:name="com.abramnel.shiftcal.AlarmActivity" android:launchMode="singleTop" android:exported="false" android:theme="@android:style/Theme.Material.NoActionBar" />
+        <activity android:name="com.abramnel.shiftcal.CalendarImageSaveActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 </manifest>

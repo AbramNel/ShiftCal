@@ -87,6 +87,7 @@ public class ShiftCalRuntimeProbe
         for(int i=0;i<8;i++)yield return null;
         var presentation=PresentationRuntimeChecks.Run(Check);while(presentation.MoveNext())yield return null;
         var qualityUpdate=QualityUpdateRuntimeChecks.Run(Check);while(qualityUpdate.MoveNext())yield return null;
+        var calendarExport=CalendarExportChecks.Runtime(Check);while(calendarExport.MoveNext())yield return null;
         Application.logMessageReceived -= Log;
         foreach(var error in errors)Debug.LogWarning("UI runtime failure: "+error);
         Debug.Log("UI runtime assertions: "+checks+"; errors: "+errors.Count);

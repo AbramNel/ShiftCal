@@ -143,6 +143,8 @@ public static partial class ShiftCalSceneBuilder
     }
     static Sprite NavigationIcon(string kind)=>Artwork("Navigation_"+kind,(x,y)=>{
         var point=new Vector2(x,y);
+        if(kind=="share")return Line(point,10,12,48,12)||Line(point,10,12,10,49)||Line(point,10,49,33,49)||Line(point,10,38,31,38)||Line(point,20,44,20,56)||Line(point,30,21,54,51,4)||Line(point,37,51,54,51,4)||Line(point,54,51,54,34,4)?1:0;
+        if(kind=="save")return Line(point,32,54,32,22,4)||Line(point,20,34,32,22,4)||Line(point,32,22,44,34,4)||Line(point,12,25,12,10)||Line(point,12,10,52,10)||Line(point,52,10,52,25)?1:0;
         if(kind=="check")return Line(point,12,31,26,17,5)||Line(point,26,17,53,47,5)?1:0;
         if(kind=="bell"||kind=="muted")return Line(point,12,17,52,17,4)||Line(point,18,18,18,35,4)||Line(point,18,35,23,46,4)||Line(point,23,46,41,46,4)||Line(point,41,46,46,35,4)||Line(point,46,35,46,18,4)||Line(point,28,10,36,10,4)||(kind=="muted"?Line(point,10,54,54,10,5):Line(point,32,47,32,54,4))?1:0;
         if(kind=="plus")return Line(point,12,32,52,32,4)||Line(point,32,12,32,52,4)?1:0;
