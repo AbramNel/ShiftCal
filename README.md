@@ -2,8 +2,6 @@
 
 Unity 6000.3.0f1 Android portrait calendar combining a rotating work schedule with shared family activities. All ongoing work belongs on **main**.
 
-Continuing on another PC? Start with [HANDOFF.md](HANDOFF.md) for the current goal, completed work, remaining checks and setup steps.
-
 The [October 16 quality-of-life update](QUALITY_OF_LIFE.md) adds Settings → Display, an optional monthly logged-hours shortcut, long-press date selection, optional scheduled shift hours, right-aligned actual-hours controls and safe Past / History workflows. Sound and selection sheets are compact, and sync failures now provide specific guidance while retaining local edits. The default rules configuration includes the current ShiftCal namespace; production deployment still requires separate authorization.
 
 Open `Assets/Calendar.unity`. The scene, row prefabs, and sprite assets are saved and wired. The permanent scene builder reproduces them; rebuilding replaces manual scene edits.

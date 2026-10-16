@@ -76,7 +76,7 @@ Alarm volume, notification channel settings and Do Not Disturb remain under Andr
 
 The October 16 update passed 1,974 focused Unity assertions, 599 play-mode assertions with zero errors, 46 native tests and lint with zero errors (three existing dependency warnings). The integrated run generated 738 current-run Canvas renders across all three themes at 360x640, 393x851 and 412x915. Local demo-project emulators passed 77 security/revision/tombstone assertions, including both rules configurations, owner/member permissions, offline pending writes, conflicts and private-data rejection. No production data was accessed. See [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md) for coverage and remaining acceptance.
 
-A non-development ARM64 APK is built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Current artifact details are recorded in [HANDOFF.md](HANDOFF.md). No Android device is attached. Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
+A non-development ARM64 APK is built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Current artifact details are recorded in [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md). No Android device is attached. Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
 
 ## Phone verification later
 
