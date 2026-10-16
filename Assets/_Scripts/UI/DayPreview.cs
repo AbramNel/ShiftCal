@@ -8,6 +8,7 @@ namespace ShiftCal.UI
     {
         public Text title, shift, shiftTime, details, workedHours;
         public Image swatch;
+        public ContentPill hoursPill;
         public RectTransform card, scroll;
         public Transform activityContent;
         public Button detailsButton,alarmButton;
@@ -26,7 +27,7 @@ namespace ShiftCal.UI
         public void RefreshHours()
         {
             if(selected==null)return;var h=App.WorkedHoursStore.Get(selected.dateKey);
-            workedHours.text=h==null?"Hours worked · Add":"Worked: "+App.WorkedHoursStore.Format(h.hundredths)+"h · Edit";sizePending=true;
+            hoursPill.SetValue(h==null?"Add hours":App.WorkedHoursStore.Format(h.hundredths)+"h worked",h!=null);sizePending=true;
         }
         public void EditHours(){if(selected!=null)WorkedHoursEditor.Instance.Open(selected.dateKey);}
         public void AddAlarm(){if(selected!=null)FindFirstObjectByType<ScheduleWorkbench>().NewPersonalAlarm(selected.dateKey);}

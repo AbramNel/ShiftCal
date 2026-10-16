@@ -13,6 +13,10 @@ namespace ShiftCal.UI
         public GameObject agendaPanel,detailsPanel;
         public Transform agendaContent,dayContent;
         public FamilyActivityRow rowPrefab;
+        public AgendaDayCard dayCardPrefab;
+        public Sprite alarmIcon,eventIcon;
+        string agendaSignature;
+        float nextAgendaCheck;
         public ActivityEditor editor;
         public Text detailsTitle,detailsBody,detailsMessage;
         public Image detailsIcon;
@@ -34,8 +38,10 @@ namespace ShiftCal.UI
         bool hooked;
         void Start(){Hook();AppSession.Instance.Changed+=Refresh;ThemeManager.Changed+=Refresh;Refresh();}
         void Hook(){if(hooked)return;hooked=true;filter.onValueChanged.AddListener(SetFilter);agendaFilter.onValueChanged.AddListener(SetFilter);showAllDates.onValueChanged.AddListener(_=>Refresh());assigned.onValueChanged.AddListener(_=>AssignmentSelected());participants.onSelectionChanged.AddListener(ParticipantsSelected);detailScope.onValueChanged.AddListener(ApplyAssignment);detailScope.onCanceled.AddListener(BindDetailsPeople);}
-        void Update(){if(undo==null||!detailsPanel.activeSelf||Time.unscaledTime<nextUndoCheck)return;nextUndoCheck=Time.unscaledTime+.5f;undo.gameObject.SetActive(lastChange?.CanUndo(AppSession.Instance.Data)==true);}
+        void Update(){if(agendaPanel.activeInHierarchy&&Time.unscaledTime>=nextAgendaCheck){nextAgendaCheck=Time.unscaledTime+10;Refresh();}if(undo==null||!detailsPanel.activeSelf||Time.unscaledTime<nextUndoCheck)return;nextUndoCheck=Time.unscaledTime+.5f;undo.gameObject.SetActive(lastChange?.CanUndo(AppSession.Instance.Data)==true);}
         void OnDestroy(){if(AppSession.Instance!=null)AppSession.Instance.Changed-=Refresh;ThemeManager.Changed-=Refresh;}
+        public void NewAgendaEvent()=>editor.New(DateKeyUtility.ToDateKey(DateTime.Today));
+        public void ToggleDates()=>showAllDates.isOn=!showAllDates.isOn;
         public void NewActivity()=>BeginNew(DateKeyUtility.ToDateKey(DateTime.Today));
         public void BeginNew(string key)=>editor.templates.StartCreation(key);
         public void ShowAgenda(){AppNavigation.Instance.Open(agendaPanel);Refresh();}
@@ -45,7 +51,9 @@ namespace ShiftCal.UI
             Hook();var s=AppSession.Instance.Data;filterIds=new List<string>{"everyone","mine","unassigned"};filterIds.AddRange(s.profiles.Where(x=>x.active).Select(x=>x.id));
             if(!filterIds.Contains(Filter)&&DeviceCalendarStore.State!=null){DeviceCalendarStore.State.filter="everyone";DeviceCalendarStore.Write();calendar.Refresh();}
             var filters=new List<SelectionItem>{new SelectionItem("Everyone","everyone"),new SelectionItem("Mine","mine"),new SelectionItem("Unassigned","unassigned")};filters.AddRange(FamilySelections.People(s));filter.SetOptions(filters);filter.SetValueWithoutNotify(Math.Max(0,filterIds.IndexOf(Filter)));agendaFilter.SetOptions(filters);agendaFilter.SetValueWithoutNotify(Math.Max(0,filterIds.IndexOf(Filter)));
-            if(!agendaPanel.activeSelf)return;Clear(agendaContent);
+            if(!agendaPanel.activeSelf)return;
+            string signature=JsonUtility.ToJson(s)+JsonUtility.ToJson(DeviceCalendarStore.State)+Filter+showAllDates.isOn+DateTime.Now.ToString("yyyy-MM-dd HH:mm")+AndroidBridge.Call<string>("deliveryStates");
+            if(agendaSignature==signature&&agendaContent.childCount>0)return;agendaSignature=signature;Clear(agendaContent);
             var information=DayInformation.Resolve(s,DateTime.Today,DateTime.Today.AddDays(6));
             var occurrences=information.Values.SelectMany(d=>d.activities).ToList();var alarms=information.Values.SelectMany(d=>d.alarms).ToList();
             int visible=0;for(int i=0;i<7;i++)
@@ -55,13 +63,20 @@ namespace ShiftCal.UI
                 var dayActivities=occurrences.Where(x=>x.dateKey==key).ToList();var dayEvents=s.events.SelectMany(e=>RecurrenceEngine.EventDates(s,e,date,date)).ToList();
                 var dayAlarms=alarms.Where(x=>(x.sourceId==null||!x.sourceId.StartsWith("activity-")||occurrences.Any(a=>"activity-"+a.seriesId==x.sourceId&&a.originalDate==x.dateKey))&&x.calendarDateKey==key&&!x.id.EndsWith(":view")&&x.state!="view"&&x.at>DateKeyUtility.UnixMsNow()&&(x.isEvent||x.audible)).ToList();
                 bool working=!string.IsNullOrEmpty(day.startTime);if(!showAllDates.isOn&&dayActivities.Count+dayEvents.Count+dayAlarms.Count==0&&!working)continue;visible++;
-                var heading=AddText(agendaContent,date.ToString("ddd, MMM d"),true);heading.raycastTarget=true;heading.gameObject.AddComponent<Button>().onClick.AddListener(()=>OpenDay(date));
-                var shift=AddText(agendaContent,day.shiftName+(!string.IsNullOrEmpty(day.startTime)?" · "+day.startTime+" – "+day.endTime:""));var button=shift.gameObject.AddComponent<Button>();shift.raycastTarget=true;button.onClick.AddListener(()=>OpenDay(date));
-                foreach(var item in dayActivities)AddRow(agendaContent,item);
-                foreach(var item in dayEvents){var label=AddText(agendaContent,item.title+" · "+DayInformation.Time(item));label.raycastTarget=true;label.gameObject.AddComponent<Button>().onClick.AddListener(()=>FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).EditEvent(item.sourceId,key));}
-                foreach(var alarm in dayAlarms)AddText(agendaContent,"This device · "+alarm.title+" · "+DayInformation.Time(alarm));
+                var card=Instantiate(dayCardPrefab,agendaContent);card.date.text=date.ToString("ddd, MMM d");card.shift.text=day.shiftName+(!string.IsNullOrEmpty(day.startTime)?"\n"+day.startTime+" – "+day.endTime:"");card.swatch.color=ShiftStyleUtility.ToColor(day.shiftColorHex);card.button.onClick.AddListener(()=>OpenDay(date));
+                foreach(var item in dayActivities)AddRow(card.entries,item);
+                foreach(var item in dayEvents){var captured=item;var row=Instantiate(rowPrefab,card.entries);row.SourceId=item.sourceId;row.ThemedBorder=true;row.BindInfo(eventIcon,item.title,DateTimeOffset.FromUnixTimeMilliseconds(item.at).ToLocalTime().ToString("t")+" · Shared event",ThemeManager.Token(ThemeManager.Role.Muted),()=>FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include).EditEvent(captured.sourceId,captured.dateKey));}
+                foreach(var alarm in dayAlarms){var captured=alarm;var row=Instantiate(rowPrefab,card.entries);row.SourceId=alarm.sourceId;row.IsAlarm=true;row.ThemedBorder=true;row.BindInfo(alarmIcon,alarm.title,DateTimeOffset.FromUnixTimeMilliseconds(alarm.at).ToLocalTime().ToString("t")+" · This device",ThemeManager.Token(ThemeManager.Role.Accent),()=>OpenAlarm(captured));}
+
             }
             if(visible==0)AddText(agendaContent,"Nothing upcoming in this filter. Turn on Show all dates to browse the week.");
+        }
+        void OpenAlarm(Occurrence alarm)
+        {
+            if(alarm.sourceId!=null&&alarm.sourceId.StartsWith("activity-")){
+                var date=DateKeyUtility.FromDateKey(alarm.calendarDateKey??alarm.dateKey);var item=ActivityResolver.Resolve(AppSession.Instance.Data,date,date).Find(a=>"activity-"+a.seriesId==alarm.sourceId&&a.originalDate==alarm.dateKey);if(item!=null)Details(item);return;
+            }
+            var work=FindFirstObjectByType<ScheduleWorkbench>(FindObjectsInactive.Include);var rule=AppSession.Instance.Data.rules.Find(r=>r.id==alarm.sourceId);if(rule!=null)work.LoadRule(rule,alarm.dateKey);else work.EditEvent(alarm.sourceId,alarm.dateKey);
         }
         void SetFilter(int value)
         {

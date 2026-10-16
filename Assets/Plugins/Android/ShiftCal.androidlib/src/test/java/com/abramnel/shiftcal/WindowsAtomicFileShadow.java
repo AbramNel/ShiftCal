@@ -11,7 +11,8 @@ import java.nio.file.*;
 @Implements(AtomicFile.class)
 public class WindowsAtomicFileShadow {
     @RealObject private AtomicFile file;
-    @Implementation protected void finishWrite(FileOutputStream stream) {
+    // Older AtomicFile writes the base file directly and removes its backup.
+    @Implementation(minSdk=29) protected void finishWrite(FileOutputStream stream) {
         if (stream == null) return;
         try {
             stream.getFD().sync();stream.close();

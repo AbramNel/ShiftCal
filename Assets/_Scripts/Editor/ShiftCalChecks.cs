@@ -275,6 +275,7 @@ public static class ShiftCalChecks
     {
         Canvas.ForceUpdateCanvases();cal.GetComponentInChildren<ResponsiveCalendarGrid>(true).Fit();Canvas.ForceUpdateCanvases();
         foreach(var cell in cal.GetComponentsInChildren<CalendarDayCell>(true))cell.FlushPresentation();
+        PresentationChecks.Fit();
         if(cal.preview.gameObject.activeInHierarchy)cal.preview.Fit();
         if(cal.shiftPicker.gameObject.activeInHierarchy)cal.shiftPicker.FlushLayout();
         Canvas.ForceUpdateCanvases();

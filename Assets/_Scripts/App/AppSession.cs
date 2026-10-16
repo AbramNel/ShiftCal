@@ -27,6 +27,7 @@ namespace ShiftCal.App
             if (CurrentGroup == null)
                 CurrentGroup = CreateDefaultGroup();
 
+            AndroidBridge.Call<string>("privacy");
             DeviceAlarmPreferences.Publish();
             SwitchAccount(PlayerPrefs.GetString("ShiftCal.ActiveAccount.v3","local"),PlayerPrefs.HasKey("ShiftCal.ActiveAccount.v3"));
         }
@@ -97,8 +98,8 @@ namespace ShiftCal.App
             ApplyRemote(); SaveLocal();
         }
 
-        private void OnApplicationPause(bool paused) { if (!paused && loaded) { AndroidBridge.Action("reconcile"); Firebase.FirestoreService.Instance?.Flush(); Changed?.Invoke(); } }
-        private void OnApplicationFocus(bool focused) { if(focused&&loaded&&alarmsActive){AndroidBridge.Action("reconcile");Changed?.Invoke();} }
+        private void OnApplicationPause(bool paused) { AndroidBridge.Call<string>("privacy"); if (!paused && loaded) { AndroidBridge.Action("reconcile"); Firebase.FirestoreService.Instance?.Flush(); Changed?.Invoke(); } }
+        private void OnApplicationFocus(bool focused) { if(focused)AndroidBridge.Call<string>("privacy"); if(focused&&loaded&&alarmsActive){AndroidBridge.Action("reconcile");Changed?.Invoke();} }
 
         public void SetShift(string dateKey, int shift)
         {

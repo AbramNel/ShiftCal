@@ -11,17 +11,20 @@ import android.widget.*;
 import org.json.*;
 import java.util.Date;
 
-/** Entirely native: usable on the lock screen before Unity has initialized. */
+/** Native alarm controls, available only after the system keyguard permits access. */
 public final class AlarmActivity extends Activity {
     private String id,account;
     private int background,surface,text,muted,accent,onAccent;
     private boolean ringing;
     public void onCreate(Bundle state){super.onCreate(state);
-        if(Build.VERSION.SDK_INT>=27){setShowWhenLocked(true);setTurnScreenOn(true);}else getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED|WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+        LockScreenPrivacy.install(this);
         render();
     }
+    @Override protected void onResume(){super.onResume();LockScreenPrivacy.apply(this);render();}
+    @Override protected void onPause(){setContentView(new FrameLayout(this));super.onPause();}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);render();}
     private void render(){
+        if(LockScreenPrivacy.locked(this)){setContentView(new FrameLayout(this));return;}
         id=getIntent().getStringExtra("id");account=getIntent().getStringExtra("account");
         if(id==null||!currentAccount()){finish();return;}
         JSONObject occurrence=null;int theme=0;
@@ -59,8 +62,9 @@ public final class AlarmActivity extends Activity {
         if(ringing)button(column,"Snooze \u2022 "+occurrence.optInt("snoozeMinutes",10)+" min",false,()->perform("snooze"));
         TextView open=label(column,"Open Calendar",17,accent,20,0,true);open.setPadding(dp(12),dp(16),dp(12),dp(16));open.setOnClickListener(v->openCalendar());
     }
-    private void perform(String action){try{AlarmScheduler.checkedAction(this,action,id,account);finish();}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
+    private void perform(String action){if(LockScreenPrivacy.locked(this))return;try{AlarmScheduler.checkedAction(this,action,id,account);finish();}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
     private void openCalendar(){
+        if(LockScreenPrivacy.locked(this))return;
         try{
             AlarmScheduler.prepareOpen(this,id,account);
             Intent launch=getPackageManager().getLaunchIntentForPackage(getPackageName());

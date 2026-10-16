@@ -95,17 +95,18 @@ public final class NativeBridge {
             AlarmStore.write(a,root);AlarmScheduler.reconcile(a,root);
         }return "";}catch(Exception e){error(a,e);return "Android scheduling error: "+e.getMessage();}
     }
+    public static String privacy(Activity a){a.runOnUiThread(()->LockScreenPrivacy.install(a));return "";}
     public static String action(Activity a,String action,String id){
         try{
             if(action.equals("background")){a.runOnUiThread(()->a.moveTaskToBack(true));return "";}
             if(action.equals("permissions")){a.runOnUiThread(()->{if(Build.VERSION.SDK_INT>=33)a.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},431);});return "";}
             if(action.equals("exact")){if(Build.VERSION.SDK_INT>=31)a.startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+a.getPackageName())));return "";}
-            if(action.equals("fullscreen")){if(Build.VERSION.SDK_INT>=34)a.startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:"+a.getPackageName())));return "";}
             if(action.equals("reconcile")){AlarmScheduler.reconcile(a);return "";}
             if(action.equals("deactivate")){synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);root.put("active",false);AlarmScheduler.cancel(a,root);AlarmStore.write(a,root);removeAllNotifications(a);a.stopService(new Intent(a,RingingService.class));}return "";}
             if(action.equals("test")){synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);JSONObject options=new JSONObject().put("vibration",true).put("snoozeMinutes",1).put("advanceMinutes",1);
                 JSONObject o=OccurrenceEngine.make("test:"+UUID.randomUUID(),"test","","ShiftCal test alarm",System.currentTimeMillis()+15000,true,options);
                 AlarmStore.account(root).put("test",o);AlarmStore.write(a,root);AlarmScheduler.reconcile(a,root);}return "";}
+            if(LockScreenPrivacy.locked(a))return "Unlock your phone to manage this alarm.";
             AlarmScheduler.action(a,action,id);return "";
         }catch(Exception e){error(a,e);return e.getMessage();}
     }
@@ -136,11 +137,10 @@ public final class NativeBridge {
         if(!AlarmScheduler.notifications(a))return "Notifications required • Tap to fix";
         if(!AlarmScheduler.exact(a))return "Exact alarm access required • Tap to fix";
         if(!channel(a,"shiftcal_ring")||!channel(a,"shiftcal_reminder"))return "Notification channel disabled • Tap for details";
-        if(Build.VERSION.SDK_INT>=34&&!nm(a).canUseFullScreenIntent())return "Full-screen alarm access missing • Tap for details";
         return "Alarm permissions ready ✓ • Scheduling details";
     }
     public static String state(Activity a,String id){try{synchronized(AlarmStore.LOCK){JSONObject e=AlarmStore.account(AlarmStore.read(a)).getJSONObject("ledger").optJSONObject(id);return e==null?"":e.optString("state");}}catch(Exception e){return "";}}
-    public static String opened(Activity a){try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);String id=root.optString("pendingOpen");if(id.isEmpty())return "";root.remove("pendingOpen");AlarmStore.write(a,root);JSONObject o=root.optJSONObject("occurrences")==null?null:root.getJSONObject("occurrences").optJSONObject(id);if(o==null){JSONObject state=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);if(state!=null)o=state.optJSONObject("occurrence");}return o==null?"":o.toString();}}catch(Exception e){return "";}}
+    public static String opened(Activity a){if(LockScreenPrivacy.locked(a))return "";try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(a);String id=root.optString("pendingOpen");if(id.isEmpty())return "";root.remove("pendingOpen");AlarmStore.write(a,root);JSONObject o=root.optJSONObject("occurrences")==null?null:root.getJSONObject("occurrences").optJSONObject(id);if(o==null){JSONObject state=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);if(state!=null)o=state.optJSONObject("occurrence");}return o==null?"":o.toString();}}catch(Exception e){return "";}}
     public static String specialDeliveries(Activity a){try{synchronized(AlarmStore.LOCK){JSONObject ledger=AlarmStore.account(AlarmStore.read(a)).getJSONObject("ledger");JSONArray items=new JSONArray();Iterator<String> keys=ledger.keys();while(keys.hasNext()){String id=keys.next();JSONObject entry=ledger.getJSONObject(id),o=entry.optJSONObject("occurrence");String state=entry.optString("state");if(o==null)continue;
         if(state.equals("ringing")||state.equals("snoozed")||state.equals("skipped")&&entry.optLong("originalAt")>System.currentTimeMillis()){JSONObject item=new JSONObject(o.toString()).put("state",state);if(state.equals("snoozed"))item.put("at",entry.optLong("at"));items.put(item);}}
         return new JSONObject().put("items",items).toString();}}catch(Exception e){return "{\"items\":[]}";}}
@@ -193,23 +193,31 @@ public final class NativeBridge {
     }));return "";}
     static NotificationManager nm(Context c){return (NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);}
     static void channels(Context c){
-        NotificationChannel ring=new NotificationChannel("shiftcal_ring","Audible alarms",NotificationManager.IMPORTANCE_HIGH);ring.setSound(null,null);ring.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);nm(c).createNotificationChannel(ring);
-        NotificationChannel reminder=new NotificationChannel("shiftcal_reminder","Reminders",NotificationManager.IMPORTANCE_DEFAULT);nm(c).createNotificationChannel(reminder);
-        NotificationChannel upcoming=new NotificationChannel("shiftcal_upcoming","Upcoming alarms",NotificationManager.IMPORTANCE_LOW);upcoming.setSound(null,null);nm(c).createNotificationChannel(upcoming);
+        NotificationChannel ring=new NotificationChannel("shiftcal_ring","Audible alarms",NotificationManager.IMPORTANCE_HIGH);ring.setSound(null,null);ring.setLockscreenVisibility(Notification.VISIBILITY_SECRET);nm(c).createNotificationChannel(ring);
+        NotificationChannel reminder=new NotificationChannel("shiftcal_reminder","Reminders",NotificationManager.IMPORTANCE_DEFAULT);reminder.setLockscreenVisibility(Notification.VISIBILITY_SECRET);nm(c).createNotificationChannel(reminder);
+        NotificationChannel upcoming=new NotificationChannel("shiftcal_upcoming","Upcoming alarms",NotificationManager.IMPORTANCE_LOW);upcoming.setSound(null,null);upcoming.setLockscreenVisibility(Notification.VISIBILITY_SECRET);nm(c).createNotificationChannel(upcoming);
     }
     static boolean channel(Context c,String id){NotificationChannel ch=nm(c).getNotificationChannel(id);return ch==null||ch.getImportance()!=NotificationManager.IMPORTANCE_NONE;}
     static PendingIntent open(Context c,String id){String account="";try{account=AlarmStore.read(c).optString("account");}catch(Exception ignored){}
         Intent i=new Intent(c,AlarmActivity.class).putExtra("id",id).putExtra("account",account).setData(Uri.parse("shiftcal://open/"+Uri.encode(account)+"/"+Uri.encode(id)));
         return PendingIntent.getActivity(c,0,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);}
+    static Notification.Action privateAction(Context c,String label,String id,String action){
+        Notification.Action.Builder builder=new Notification.Action.Builder(null,label,AlarmScheduler.intent(c,id,action));
+        if(Build.VERSION.SDK_INT>=31)builder.setAuthenticationRequired(true);
+        return builder.build();
+    }
     static Notification notification(Context c,JSONObject o,boolean ringing,boolean upcoming){
         String id=o.optString("id"),channel=ringing?"shiftcal_ring":upcoming?"shiftcal_upcoming":"shiftcal_reminder";
+        // Generic even when unlocked: an existing notification must stay safe if
+        // keyguard appears later or an existing channel allows public contents.
         Notification.Builder b=new Notification.Builder(c,channel).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle((upcoming?"Upcoming: ":"")+o.optString("title")).setContentText(DateFormat.getDateTimeInstance().format(new Date(o.optLong("at"))))
-            .setContentIntent(open(c,id)).setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(ringing?Notification.CATEGORY_ALARM:Notification.CATEGORY_REMINDER)
+            .setContentTitle(ringing?"ShiftCal alarm":upcoming?"Upcoming ShiftCal alarm":"ShiftCal reminder")
+            .setContentText("Unlock your phone to view and manage this alarm.")
+            .setContentIntent(open(c,id)).setVisibility(Notification.VISIBILITY_SECRET)
+            .setCategory(ringing?Notification.CATEGORY_ALARM:Notification.CATEGORY_REMINDER)
             .setOnlyAlertOnce(true).setOngoing(ringing).setAutoCancel(!ringing&&!upcoming);
-        if(ringing){b.addAction(new Notification.Action.Builder(null,"Dismiss",AlarmScheduler.intent(c,id,"dismiss")).build());b.addAction(new Notification.Action.Builder(null,"Snooze",AlarmScheduler.intent(c,id,"snooze")).build());
-            if(Build.VERSION.SDK_INT<34||nm(c).canUseFullScreenIntent())b.setFullScreenIntent(open(c,id),true);
-        }else b.addAction(new Notification.Action.Builder(null,upcoming?"Dismiss this alarm":"Dismiss",AlarmScheduler.intent(c,id,upcoming?"skip":"dismiss")).build());
+        if(ringing){b.addAction(privateAction(c,"Dismiss",id,"dismiss"));b.addAction(privateAction(c,"Snooze",id,"snooze"));}
+        else b.addAction(privateAction(c,upcoming?"Dismiss this alarm":"Dismiss",id,upcoming?"skip":"dismiss"));
         return b.build();
     }
     static void upcoming(Context c,JSONObject o){if(AlarmScheduler.notifications(c))nm(c).notify(o.optString("id"),1,notification(c,o,false,true));}

@@ -179,15 +179,13 @@ public static partial class ShiftCalSceneBuilder
         RectTransform monthBar = CreateHorizontalGroup("Month Bar", screen.transform, 18, 12, 12, 8, 8).GetComponent<RectTransform>();
         AnchorStretch(monthBar, 0, 1, 1, 1, 24, -316, -24, -164);
         Image monthImage = monthBar.gameObject.AddComponent<Image>();
-        monthImage.color = CardSoft;
-        AddOutline(monthBar.gameObject, Border);
+        monthImage.color = Color.clear;
+        var monthLayout=monthBar.GetComponent<HorizontalLayoutGroup>();monthLayout.padding=new RectOffset();monthLayout.childForceExpandHeight=false;monthLayout.childAlignment=TextAnchor.MiddleCenter;
 
         Button prev = CreateButton("Previous Month Button", monthBar, "<", Vector2.zero, Vector2.zero, Input, Primary, 42);
-        var monthCenter=CreatePanel("Month summary",monthBar,Color.clear);AddLayoutElement(monthCenter,0,132,1);
-        Text month=CreateText("Month Label",monthCenter.transform,"July 2026",40,TextDark,TextAnchor.MiddleCenter,FontStyle.Bold);AnchorStretch(month.rectTransform,0,.5f,1,1,0,0,0,0);
-        var monthly=CreateButton("Monthly actual hours",monthCenter.transform,"0h logged",Vector2.zero,Vector2.zero,Input,Primary,30);AnchorStretch(monthly.GetComponent<RectTransform>(),0,0,1,.5f,10,0,-10,0);
-        // The whole month summary is a comfortable touch target for its compact pill.
-        monthCenter.GetComponent<Image>().raycastTarget=true;var monthButton=monthCenter.AddComponent<Button>();monthButton.targetGraphic=monthCenter.GetComponent<Image>();UnityEventTools.AddPersistentListener(monthButton.onClick,controller.ShowHoursMonth);UnityEventTools.AddPersistentListener(monthly.onClick,controller.ShowHoursMonth);controller.monthlyHours=monthly.GetComponentInChildren<Text>();
+        var monthCenter=CreatePanel("Month summary",monthBar,Color.clear);AddLayoutElement(monthCenter,0,196,1);
+        Text month=CreateText("Month Label",monthCenter.transform,"July 2026",44,TextDark,TextAnchor.MiddleCenter,FontStyle.Bold);AnchorStretch(month.rectTransform,0,1,1,1,0,-60,0,0);
+        controller.monthlyPill=HoursPill(monthCenter.transform,"Monthly actual hours",controller.ShowHoursMonth);controller.monthlyPill.label.fontSize=32;controller.monthlyPill.SetValue("0h logged");AnchorStretch((RectTransform)controller.monthlyPill.transform,.5f,1,.5f,1,-160,-194,160,-62);controller.monthlyHours=controller.monthlyPill.label;
         Button next = CreateButton("Next Month Button", monthBar, ">", Vector2.zero, Vector2.zero, Input, Primary, 42);
         AddLayoutElement(prev.gameObject, 132, 132);
 
@@ -217,9 +215,9 @@ public static partial class ShiftCalSceneBuilder
         controller.shiftPicker = CreateShiftPicker(screen.transform, controller);
         GameObject repeatPanel = CreateRepeatPanel(screen.transform, controller);
         var edit=CreateButton("Edit calendar",screen.transform,"Edit",Vector2.zero,Vector2.zero,Input,Primary,36);
-        AnchorStretch(edit.GetComponent<RectTransform>(),1,1,1,1,-452,-148,-284,-16);
+        AnchorStretch(edit.GetComponent<RectTransform>(),1,1,1,1,-414,-132,-250,0);
         var settingsButton=CreateButton("Calendar Settings Button",screen.transform,"Settings",Vector2.zero,Vector2.zero,Input,Primary,36);
-        AnchorStretch(settingsButton.GetComponent<RectTransform>(),1,1,1,1,-270,-148,-24,-16);UnityEventTools.AddPersistentListener(edit.onClick,controller.ToggleEdit);
+        AnchorStretch(settingsButton.GetComponent<RectTransform>(),1,1,1,1,-234,-132,-24,0);UnityEventTools.AddPersistentListener(edit.onClick,controller.ToggleEdit);
         controller.editLabel=edit.GetComponentInChildren<Text>();
         var bar=CreateHorizontalGroup("Selection bar",screen.transform,12,8,8,8,8);AnchorStretch(bar.GetComponent<RectTransform>(),0,0,1,0,24,24,-24,160);
         var selectionLabel=CreateText("Selection Label",bar.transform,"Tap or drag dates",34,TextMuted,TextAnchor.MiddleLeft,FontStyle.Normal);AddLayoutElement(selectionLabel.gameObject,0,-1,1);
@@ -347,7 +345,7 @@ public static partial class ShiftCalSceneBuilder
         var header=CreateHorizontalGroup("Shift summary",content,18,0,0,0,0);AddLayoutElement(header,-1,70);
         var swatch=CreateImage("Day Details Color",header.transform,Hex("#FBBF24"));swatch.sprite=Rounded;swatch.type=Image.Type.Sliced;AddLayoutElement(swatch.gameObject,64,54);
         var shift=Body(header.transform,"Shift",70);AddLayoutElement(shift.gameObject,0,70,1);
-        var time=Body(content,"Time",58);var hoursAction=Command(content,"Hours worked · Add",popup.EditHours);popup.workedHours=hoursAction.GetComponentInChildren<Text>();var hoursIcon=CreateImage("Worked clock",hoursAction.transform,Primary);hoursIcon.sprite=Icon("Clock");hoursIcon.raycastTarget=false;AnchorStretch(hoursIcon.rectTransform,0,.5f,0,.5f,20,-24,68,24);AnchorStretch(popup.workedHours.rectTransform,0,0,1,1,88,4,-12,-4);var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
+        var time=Body(content,"Time",58);var hoursRow=CreatePanel("Day actual hours row",content,Color.clear);AddLayoutElement(hoursRow,-1,132);popup.hoursPill=HoursPill(hoursRow.transform,"Hours worked · Add",popup.EditHours,true);AnchorStretch((RectTransform)popup.hoursPill.transform,0,.5f,0,.5f,0,-66,420,66);popup.workedHours=popup.hoursPill.label;var events=Body(content,"",160);events.GetComponent<LayoutElement>().preferredHeight=-1;
         var actions=CreateHorizontalGroup("Day quick actions",content,18,0,0,0,0);AddLayoutElement(actions,-1,132);var addEvent=Command(actions.transform,"Add Event",popup.AddEvent);var addAlarm=Command(actions.transform,"Add Alarm",popup.AddAlarm);AddLayoutElement(addEvent.gameObject,0,132,1);AddLayoutElement(addAlarm.gameObject,0,132,1);
         var note=Field(content,"note","Notes",true);
         Command(content,"Change shift",popup.ChangeShift);popup.restoreButton=Command(content,"Restore scheduled shift",popup.Restore);

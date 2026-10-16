@@ -398,7 +398,6 @@ namespace ShiftCal.UI
         public void UndoSkip(){if(!string.IsNullOrEmpty(undoId)){AndroidBridge.Action("undo",undoId);undoId=null;Refresh();Message("Skip undone if the alarm is still in the future.");}}
         public void Permissions()=>AndroidBridge.Action("permissions");
         public void ExactAccess()=>AndroidBridge.Action("exact");
-        public void FullscreenAccess()=>AndroidBridge.Action("fullscreen");
         public void TestAlarm(){AndroidBridge.Action("test");Message("Test requested for 15 seconds from now. Check readiness.");}
         public void Retry(){FirestoreService.Instance.StartListening();FirestoreService.Instance.Flush();Refresh();}
         public void ImportLocal(){AppSession.Instance.ImportLocal();}

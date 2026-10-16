@@ -29,15 +29,7 @@ public static partial class ShiftCalSceneBuilder
         var gesture=calendarScreen.AddComponent<CalendarGestureController>();gesture.calendar=work.calendar;work.calendar.gesture=gesture;
         var editor=root.gameObject.AddComponent<ActivityEditor>();work.editor=editor;editor.workbench=work;
         work.rowPrefab=BuildFamilyRow();
-        work.agendaPanel=CreateScreen("Family Agenda",root);var agenda=ScreenContent(work.agendaPanel,"Upcoming — Next 7 Days");BackButton(work.agendaPanel);
-        work.agendaFilter=Choice(agenda,"Show events",new[]{"Everyone"});Command(agenda,"Add Event",work.NewActivity);work.showAllDates=Check(agenda,"Show all dates",false,96);work.agendaContent=Section(agenda,"Seven day entries").transform;work.agendaPanel.SetActive(false);
-
-        var filterRow=CreateHorizontalGroup("Family filter",calendarScreen.transform,12,0,0,0,0);AnchorStretch(filterRow.GetComponent<RectTransform>(),0,1,1,1,24,-426,-24,-286);
-        var filterContainer=Section(filterRow.transform,"Filter selection");AddLayoutElement(filterContainer,0,140,1);work.filter=Choice(filterContainer.transform,"Show events",new[]{"Everyone"});Object.DestroyImmediate(filterContainer.transform.GetChild(0).gameObject);work.filter.transform.GetComponent<LayoutElement>().preferredHeight=132;var filterIcon=CreateImage("Filter sprite",work.filter.transform,Primary);filterIcon.sprite=NavigationIcon("filter");filterIcon.raycastTarget=false;AnchorStretch(filterIcon.rectTransform,0,.5f,0,.5f,16,-18,52,18);work.filter.captionText.rectTransform.offsetMin=new Vector2(64,8);
-        var agendaButton=Command(filterRow.transform,"Agenda",work.ShowAgenda);AddLayoutElement(agendaButton.gameObject,246,132);
-        AnchorStretch(FindChild(calendarScreen.transform,"Month Bar").GetComponent<RectTransform>(),0,1,1,1,24,-286,-24,-164);
-        AnchorStretch(FindChild(calendarScreen.transform,"Weekday Row").GetComponent<RectTransform>(),0,1,1,1,24,-488,-24,-438);
-        var grid=FindChild(calendarScreen.transform,"Permanent Calendar Grid").GetComponent<RectTransform>();grid.offsetMax=new Vector2(grid.offsetMax.x,-498);
+        CreateAgendaPresentation(work,root);CreateCalendarTools(work,calendarScreen);
         var dayPopup=calendarScreen.GetComponentInChildren<DayDetailsPopup>(true);dayPopup.family=work;
         var dayContent=FindChild(dayPopup.transform,"Day Details Content");dayPopup.activityContent=Section(dayContent,"Day activities").transform;dayPopup.activityContent.SetSiblingIndex(5);
 
@@ -94,11 +86,11 @@ public static partial class ShiftCalSceneBuilder
     }
     static FamilyActivityRow BuildFamilyRow()
     {
-        var go=CreateHorizontalGroup("FamilyActivityRow",null,20,20,20,12,12);AddLayoutElement(go,-1,150);var bg=go.AddComponent<Image>();bg.sprite=Rounded;bg.type=Image.Type.Sliced;bg.color=CardSoft;
-        var row=go.AddComponent<FamilyActivityRow>();row.button=go.AddComponent<Button>();row.button.targetGraphic=bg;go.GetComponent<LayoutElement>().preferredHeight=-1;go.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
-        var badge=CreatePanel("Activity badge",go.transform,Color.clear);AddLayoutElement(badge,92,92);row.frame=CreateImage("Assignment outline",badge.transform,TextMuted);row.frame.sprite=SelectionFrame;row.frame.type=Image.Type.Sliced;row.frame.raycastTarget=false;Stretch(row.frame.rectTransform);
-        row.icon=CreateImage("Activity symbol",badge.transform,TextDark);row.icon.preserveAspect=true;row.icon.raycastTarget=false;AnchorStretch(row.icon.rectTransform,0,0,1,1,14,14,-14,-14);
-        var text=Section(go.transform,"Activity summary");Object.DestroyImmediate(text.GetComponent<ContentSizeFitter>());AddLayoutElement(text,0,-1,1);row.title=Body(text.transform,"Activity",-1);row.title.fontStyle=FontStyle.Bold;row.title.fontSize=36;row.detail=Body(text.transform,"Untimed · Unassigned",-1);row.detail.fontSize=30;BakeThemes(go.transform);var iconTheme=row.icon.gameObject.AddComponent<ThemeManager>();iconTheme.role=ThemeManager.Role.Text;iconTheme.Paint();var detailTheme=row.detail.GetComponent<ThemeManager>();detailTheme.role=ThemeManager.Role.Muted;detailTheme.Paint();
+        var go=CreateHorizontalGroup("FamilyActivityRow",null,16,16,16,16,16);AddLayoutElement(go,-1,150);var bg=go.AddComponent<Image>();bg.sprite=Rounded;bg.type=Image.Type.Sliced;bg.color=Input;
+        var row=go.AddComponent<FamilyActivityRow>();row.button=go.AddComponent<Button>();row.button.targetGraphic=bg;go.GetComponent<LayoutElement>().preferredHeight=-1;go.GetComponent<LayoutElement>().minHeight=132;go.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+        var badge=CreatePanel("Activity badge",go.transform,Color.clear);AddLayoutElement(badge,72,72);row.frame=CreateImage("Assignment outline",badge.transform,TextMuted);row.frame.sprite=SelectionFrame;row.frame.type=Image.Type.Sliced;row.frame.raycastTarget=false;Stretch(row.frame.rectTransform);
+        row.icon=CreateImage("Activity symbol",badge.transform,TextDark);row.icon.preserveAspect=true;row.icon.raycastTarget=false;AnchorStretch(row.icon.rectTransform,0,0,1,1,10,10,-10,-10);
+        var text=Section(go.transform,"Activity summary");Object.DestroyImmediate(text.GetComponent<ContentSizeFitter>());AddLayoutElement(text,0,-1,1);row.title=Body(text.transform,"Activity",-1);row.title.fontStyle=FontStyle.Bold;row.title.fontSize=36;row.detail=Body(text.transform,"Untimed · Unassigned",-1);row.detail.fontSize=30;BakeThemes(go.transform);Object.DestroyImmediate(row.frame.GetComponent<ThemeManager>());var iconTheme=row.icon.gameObject.AddComponent<ThemeManager>();iconTheme.role=ThemeManager.Role.Text;iconTheme.Paint();var detailTheme=row.detail.GetComponent<ThemeManager>();detailTheme.role=ThemeManager.Role.Muted;detailTheme.Paint();
         var prefab=PrefabUtility.SaveAsPrefabAsset(go,PrefabFolder+"/FamilyActivityRow.prefab");Object.DestroyImmediate(go);return prefab.GetComponent<FamilyActivityRow>();
     }
     static void BuildProfiles(Transform root,Transform settings)
@@ -151,6 +143,9 @@ public static partial class ShiftCalSceneBuilder
     }
     static Sprite NavigationIcon(string kind)=>Artwork("Navigation_"+kind,(x,y)=>{
         var point=new Vector2(x,y);
+        if(kind=="plus")return Line(point,12,32,52,32,4)||Line(point,32,12,32,52,4)?1:0;
+        if(kind=="pencil")return Line(point,15,12,20,26,4)||Line(point,20,26,43,49,4)||Line(point,43,49,53,39,4)||Line(point,53,39,30,16,4)||Line(point,30,16,15,12,4)||Line(point,37,43,47,33,4)?1:0;
+        if(kind=="agenda")return Line(point,13,10,51,10)||Line(point,13,10,13,54)||Line(point,51,10,51,54)||Line(point,13,54,51,54)||Line(point,23,43,43,43)||Line(point,23,32,43,32)||Line(point,23,21,43,21)?1:0;
         if(kind=="calendar")return Line(point,12,12,52,12)||Line(point,12,12,12,50)||Line(point,12,50,52,50)||Line(point,52,50,52,12)||Line(point,12,39,52,39)||Line(point,23,45,23,57)||Line(point,41,45,41,57)||Box(point,21,23,28,30)||Box(point,36,23,43,30)?1:0;
         if(kind=="templates")return Line(point,13,15,13,51)||Line(point,13,51,44,51)||Line(point,44,51,44,15)||Line(point,44,15,13,15)||Line(point,23,8,53,8)||Line(point,53,8,53,42)||Line(point,22,39,35,39)||Line(point,22,28,35,28)?1:0;
         if(kind=="repeat-cycle")return Line(point,14,40,14,47)||Line(point,14,47,46,47)||Line(point,46,47,53,38)||Line(point,44,39,53,38)||Line(point,53,38,52,48)||Line(point,50,24,50,17)||Line(point,50,17,18,17)||Line(point,18,17,11,26)||Line(point,11,26,20,25)||Line(point,11,26,12,16)?1:0;

@@ -12,6 +12,7 @@ namespace ShiftCal.UI
         [SerializeField] private InputField noteInput;
         public Button restoreButton;
         public Text workedHours;
+        public ContentPill hoursPill;
         public CalendarController calendar;
         public FamilyWorkbench family;
         public Transform activityContent;
@@ -21,7 +22,7 @@ namespace ShiftCal.UI
         private void OnEnable(){if(App.AppSession.Instance!=null)App.AppSession.Instance.Changed+=RefreshActivities;App.WorkedHoursStore.Changed+=RefreshHours;}
         private void OnDisable(){if(App.AppSession.Instance!=null)App.AppSession.Instance.Changed-=RefreshActivities;App.WorkedHoursStore.Changed-=RefreshHours;}
         private void RefreshActivities(){if(selected!=null&&!Current){Hide();return;}if(selected!=null){if(activityContent!=null)family?.FillDay(selected.dateKey,activityContent);RefreshShift();var date=selected.date;var infos=DayInformation.Resolve(App.AppSession.Instance.Data,date,date);RefreshEntries(infos.TryGetValue(selected.dateKey,out var info)?info:new DayInformation());}}
-        private void RefreshHours(){if(selected!=null&&workedHours!=null){var h=App.WorkedHoursStore.Get(selected.dateKey);workedHours.text=h==null?"Hours worked · Add":"Worked: "+App.WorkedHoursStore.Format(h.hundredths)+"h · Edit";}}
+        private void RefreshHours(){if(selected!=null&&workedHours!=null){var h=App.WorkedHoursStore.Get(selected.dateKey);hoursPill.SetValue(h==null?"Add hours":App.WorkedHoursStore.Format(h.hundredths)+"h worked",h!=null);}}
         public void EditHours(){if(Current)WorkedHoursEditor.Instance.Open(selected.dateKey);}
         public bool HasChanges => noteInput.text != originalNote;
         public void Show(CalendarDayData day) => Show(day, null);

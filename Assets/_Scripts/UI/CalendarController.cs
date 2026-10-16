@@ -35,6 +35,7 @@ namespace ShiftCal.UI
         public GameObject selectionBar;
         public DayPreview preview;
         public Text monthlyHours;
+        public ContentPill monthlyPill;
         public void ShowHoursMonth()=>WorkedHoursEditor.Instance.ShowMonth(currentMonth);
         private void RefreshHours(){Refresh();preview?.RefreshHours();}
         private Dictionary<string, DayInformation> information = new Dictionary<string, DayInformation>();
@@ -114,7 +115,7 @@ namespace ShiftCal.UI
 
             if (uiMonthLabel != null)
                 uiMonthLabel.text = currentMonth.ToString("MMMM yyyy");
-            if(monthlyHours!=null)monthlyHours.text=App.WorkedHoursStore.Format(App.WorkedHoursStore.Total(currentMonth))+"h logged";
+            if(monthlyHours!=null)monthlyPill.SetValue(App.WorkedHoursStore.Format(App.WorkedHoursStore.Total(currentMonth))+"h logged");
 
             for (int i = 0; i < dayCells.Count; i++)
             {

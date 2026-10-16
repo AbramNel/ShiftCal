@@ -83,6 +83,7 @@ public class ShiftCalRuntimeProbe
         var quality=QualityOfLifeChecks.Runtime(Check);while(quality.MoveNext())yield return null;
         var dayHours=DayAndHoursRuntimeChecks.Run(Check);while(dayHours.MoveNext())yield return null;
         for(int i=0;i<8;i++)yield return null;
+        var presentation=PresentationRuntimeChecks.Run(Check);while(presentation.MoveNext())yield return null;
         Application.logMessageReceived -= Log;
         foreach(var error in errors)Debug.LogWarning("UI runtime failure: "+error);
         Debug.Log("UI runtime assertions: "+checks+"; errors: "+errors.Count);

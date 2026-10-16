@@ -21,7 +21,7 @@ public static partial class ShiftCalSceneBuilder
         var readiness=Command(agenda,"Alarm readiness",work.TogglePermissions);work.permissionSummary=readiness.GetComponentInChildren<Text>();
         work.permissionDetails=CreateVerticalGroup("Readiness details",agenda,12,0,0,0,0);work.permissionDetails.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
         work.readinessLabel=Body(work.permissionDetails.transform,"Alarm readiness",230);
-        Command(work.permissionDetails.transform,"Notifications",work.Permissions);Command(work.permissionDetails.transform,"Exact alarms",work.ExactAccess);Command(work.permissionDetails.transform,"Full-screen alarms",work.FullscreenAccess);Command(work.permissionDetails.transform,"Test alarm (15 seconds)",work.TestAlarm);
+        Command(work.permissionDetails.transform,"Notifications",work.Permissions);Command(work.permissionDetails.transform,"Exact alarms",work.ExactAccess);Command(work.permissionDetails.transform,"Test alarm (15 seconds)",work.TestAlarm);
         work.permissionDetails.SetActive(false);
         var add=CreateHorizontalGroup("Add actions",agenda,18,0,0,0,0);AddLayoutElement(add,-1,132);
         var addEvent=Command(add.transform,"+ Add event",work.NewEvent);var addAlarm=Command(add.transform,"+ Shift alarm",work.NewRule);AddLayoutElement(addEvent.gameObject,0,-1,1);AddLayoutElement(addAlarm.gameObject,0,-1,1);

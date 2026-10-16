@@ -8,6 +8,7 @@ namespace ShiftCal.UI
     public class WorkedHoursEditor : MonoBehaviour
     {
         public Text heading,message;
+        public Sprite hoursIcon;
         public InputField input;
         public SelectionField monthSummary;
         string key,account,group;
@@ -34,7 +35,7 @@ namespace ShiftCal.UI
             if(!hooked){hooked=true;monthSummary.onValueChanged.AddListener(i=>Open(monthSummary.options[i].id));}
             var entries=WorkedHoursStore.Month(month);monthSummary.heading=month.ToString("MMMM yyyy")+" · "+WorkedHoursStore.Format(WorkedHoursStore.Total(month))+"h logged · "+entries.Count+" days";
             if(entries.Count==0){Open(DateKeyUtility.ToDateKey(month.Year==DateTime.Today.Year&&month.Month==DateTime.Today.Month?DateTime.Today:month));return;}
-            monthSummary.SetOptions(entries.ConvertAll(e=>new SelectionItem(DateKeyUtility.FromDateKey(e.dateKey).ToString("ddd, MMM d")+" · "+WorkedHoursStore.Format(e.hundredths)+"h",e.dateKey,"Tap to edit actual hours")));monthSummary.Open();
+            monthSummary.SetOptions(entries.ConvertAll(e=>new SelectionItem(DateKeyUtility.FromDateKey(e.dateKey).ToString("ddd, MMM d")+" · "+WorkedHoursStore.Format(e.hundredths)+"h",e.dateKey,"Tap to edit actual hours"){icon=hoursIcon}));monthSummary.Open();
         }
     }
 }
