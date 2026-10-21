@@ -4,7 +4,7 @@ Implemented directly on main, starting from cec4293f39544535448e9a2ce5371d0dae58
 
 ## Workflows
 
-Tap any calendar date for its compact preview. The shift and start/end times remain visible; the clock row opens a small decimal hours editor. Saving leaves the preview open and updates its value, the cell badge and the month total immediately. Clear removes an entry; saving zero retains a 0h badge. Another date updates the preview, a second tap opens full details, and Details, X and Back retain their existing navigation roles. The preview fits its content within the safe area and scrolls when needed.
+Tap any calendar date for its compact preview. The shift and start/end times remain visible; the clock row opens a small decimal hours editor. Saving closes both the hours editor and its matching day preview, returning directly to the calendar with the cell badge and month total updated immediately. Cancel returns to the preview; invalid input or a failed write keeps the hours editor open. Clear removes an entry; saving zero retains a 0h badge. Another date updates the preview, a second tap opens full details, and Details, X and Back retain their existing navigation roles. The preview fits its content within the safe area and scrolls when needed.
 
 Day Details removes the scheduled-hours total and obsolete Person input. It retains notes, shift name/color/times, Change Shift, contextual Restore Scheduled Shift, events and family activities. Notes save through UpdateDayNotes and preserve the stored personName and existing shift state. Restoring the rotation retains notes, hidden person data, activities and actual hours.
 

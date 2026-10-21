@@ -26,7 +26,14 @@ namespace ShiftCal.UI
         {
             if(!Current()){message.text="The active calendar changed. Reopen the hours entry.";return;}
             if(!WorkedHoursStore.TryParse(input.text,out var amount)){message.text="Use 0–24 hours, with up to two decimal places.";return;}
-            try{WorkedHoursStore.Set(key,amount);Cancel();}catch(Exception ex){message.text=ex.Message;}
+            try
+            {
+                WorkedHoursStore.Set(key,amount);
+                Cancel();
+                var preview=FindFirstObjectByType<DayPreview>();
+                if(preview!=null&&preview.DateKey==key)preview.Hide();
+            }
+            catch(Exception ex){message.text=ex.Message;}
         }
         public void Clear(){if(!Current()){Cancel();return;}try{WorkedHoursStore.Set(key,null);Cancel();}catch(Exception ex){message.text=ex.Message;}}
         public void Cancel(){input.DeactivateInputField();gameObject.SetActive(false);}
