@@ -36,6 +36,37 @@ namespace ShiftCal.UI
         public DayPreview preview;
         public Text monthlyHours;
         public ContentPill monthlyPill;
+        private readonly Vector3[] previewCorners=new Vector3[4];
+
+        // The centered Monday-Friday block, two rows below early selections or above later ones.
+        public bool TryGetPreviewBounds(string dateKey,RectTransform relativeTo,out Rect bounds)
+        {
+            bounds=default;
+            int index=dayCells.FindIndex(cell=>cell!=null&&cell.DateKey==dateKey&&cell.gameObject.activeInHierarchy);
+            if(index<0||relativeTo==null)return false;
+            int row=index/7;
+            int firstRow=row<2?row+1:row-2;
+            int first=firstRow*7+1,last=(firstRow+1)*7+5;
+            if(first<0||last>=dayCells.Count||dayCells[first]==null||dayCells[last]==null)return false;
+            var left=PreviewCellBounds((RectTransform)dayCells[first].transform,relativeTo);
+            var right=PreviewCellBounds((RectTransform)dayCells[last].transform,relativeTo);
+            bounds=Rect.MinMaxRect(left.xMin,right.yMin,right.xMax,left.yMax);
+            return bounds.width>0&&bounds.height>0;
+        }
+
+        Rect PreviewCellBounds(RectTransform cell,RectTransform relativeTo)
+        {
+            cell.GetWorldCorners(previewCorners);
+            var min=new Vector2(float.PositiveInfinity,float.PositiveInfinity);
+            var max=new Vector2(float.NegativeInfinity,float.NegativeInfinity);
+            foreach(var corner in previewCorners)
+            {
+                Vector2 point=relativeTo.InverseTransformPoint(corner);
+                min=Vector2.Min(min,point);max=Vector2.Max(max,point);
+            }
+            return Rect.MinMaxRect(min.x,min.y,max.x,max.y);
+        }
+
         public void ShowHoursMonth()=>WorkedHoursEditor.Instance.ShowMonth(currentMonth);
         private void RefreshHours(){Refresh();preview?.RefreshHours();}
         private Dictionary<string, DayInformation> information = new Dictionary<string, DayInformation>();

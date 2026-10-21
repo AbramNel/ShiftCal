@@ -42,7 +42,7 @@ public static partial class ShiftCalSceneBuilder
     }
     private static DayPreview CreateDayPreview(Transform parent,DayDetailsPopup editor)
     {
-        // A low backdrop keeps the calendar available for directly choosing another day.
+        // A floating card keeps the selected row and the rest of the calendar available.
         var overlay=CreatePanel("Compact Day Preview",parent,Color.clear);Stretch(overlay.GetComponent<RectTransform>());overlay.GetComponent<Image>().raycastTarget=true;
         overlay.AddComponent<ModalPanel>();var preview=overlay.AddComponent<DayPreview>();preview.editor=editor;
         var card=CreatePanel("Preview card",overlay.transform,Card);preview.card=card.GetComponent<RectTransform>();
@@ -60,9 +60,10 @@ public static partial class ShiftCalSceneBuilder
         preview.details=Body(content,"Details",100);var layout=preview.details.GetComponent<LayoutElement>();layout.preferredHeight=-1;
         preview.activityContent=Section(content,"Preview activities").transform;
         var full=CreateButton("Details",card.transform,"Details",Vector2.zero,Vector2.zero,Input,Primary,38);preview.detailsButton=full;AnchorStretch(full.GetComponent<RectTransform>(),1,0,1,0,-320,12,-24,144);UnityEventTools.AddPersistentListener(full.onClick,preview.OpenDetails);full.GetComponentInChildren<Text>().alignment=TextAnchor.MiddleLeft;full.GetComponentInChildren<Text>().rectTransform.offsetMin=new Vector2(24,4);full.GetComponentInChildren<Text>().rectTransform.offsetMax=new Vector2(-72,-4);var arrow=CreateImage("Details chevron",full.transform,Primary);arrow.sprite=NavigationIcon("right");arrow.raycastTarget=false;AnchorStretch(arrow.rectTransform,1,.5f,1,.5f,-62,-20,-22,20);
-        // Don't block date taps in the upper calendar; blank space is dismissed by the parent callback.
+        // Don't block date taps around the floating card; blank space dismisses it.
         overlay.GetComponent<Image>().raycastTarget=false;
         overlay.AddComponent<PreviewOutsideDismiss>();
+        preview.LayoutContents();
         overlay.SetActive(false);return preview;
     }
     private static ShiftEditor CreateShiftEditor(Transform parent)

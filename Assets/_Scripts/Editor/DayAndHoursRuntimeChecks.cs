@@ -19,17 +19,57 @@ public static class DayAndHoursRuntimeChecks
         bool target=hits.Count>0&&(hits[0].gameObject.transform==rect||hits[0].gameObject.transform.IsChildOf(rect));check(target,"real pointer receives "+label+(target?"":" / top="+(hits.Count>0?hits[0].gameObject.name:"none")));if(target)ExecuteEvents.ExecuteHierarchy(hits[0].gameObject,pointer,ExecuteEvents.pointerClickHandler);
     }
     static IEnumerator Click(Button button,Action<bool,string> check,string label){var rect=(RectTransform)button.transform;var scroll=rect.GetComponentInParent<ScrollRect>();if(scroll!=null){var point=scroll.viewport.InverseTransformPoint(rect.TransformPoint(rect.rect.center));scroll.StopMovement();scroll.content.anchoredPosition-=new Vector2(0,point.y-scroll.viewport.rect.center.y);}yield return null;yield return null;Tap((RectTransform)button.transform,check,label);yield return null;yield return null;}
+    static Rect BoundsIn(RectTransform target,RectTransform parent)
+    {
+        var corners=new Vector3[4];target.GetWorldCorners(corners);
+        Vector2 min=parent.InverseTransformPoint(corners[0]),max=min;
+        foreach(var corner in corners){Vector2 point=parent.InverseTransformPoint(corner);min=Vector2.Min(min,point);max=Vector2.Max(max,point);}
+        return Rect.MinMaxRect(min.x,min.y,max.x,max.y);
+    }
+    static IEnumerator CheckFloatingPreview(CalendarController calendar,Action<bool,string> check)
+    {
+        var cells=calendar.GetComponentsInChildren<CalendarDayCell>().Where(c=>c.DateKey!=null).OrderBy(c=>c.DateKey,StringComparer.Ordinal).ToArray();
+        check(cells.Length==42,"floating preview has six visible week rows");
+        if(cells.Length!=42)yield break;
+        var preview=calendar.preview;var parent=(RectTransform)preview.card.parent;
+        for(int row=0;row<6;row++)
+        {
+            var selected=cells[row*7+(row%2==0?0:6)];
+            preview.Hide();calendar.TapDay(selected.DateKey);yield return null;yield return null;preview.Fit();
+            var panel=BoundsIn(preview.card,parent);var clicked=BoundsIn((RectTransform)selected.transform,parent);
+            int firstRow=row<2?row+1:row-2;
+            var first=BoundsIn((RectTransform)cells[firstRow*7+1].transform,parent);
+            var last=BoundsIn((RectTransform)cells[(firstRow+1)*7+5].transform,parent);
+            check(Mathf.Abs(panel.xMin-first.xMin)<.5f&&Mathf.Abs(panel.xMax-last.xMax)<.5f&&Mathf.Abs(panel.yMin-last.yMin)<.5f&&Mathf.Abs(panel.yMax-first.yMax)<.5f,"preview spans the middle five columns and two rows for week "+row);
+            check(row<2?panel.yMax<clicked.yMin:panel.yMin>clicked.yMax,"preview leaves the selected week visible for week "+row);
+            check(parent.rect.Contains(panel.min)&&parent.rect.Contains(panel.max),"preview stays inside the safe calendar area for week "+row);
+            check(preview.scroll.rect.height>0,"floating preview retains a scrollable body for week "+row);
+            foreach(var button in new[]{preview.detailsButton,preview.alarmButton,preview.hoursPill.button})
+            {
+                var rect=BoundsIn((RectTransform)button.transform,preview.card);
+                check(preview.card.rect.Contains(rect.min)&&preview.card.rect.Contains(rect.max)&&rect.height>=108,"floating action stays inside the card with its touch target: "+button.name);
+            }
+        }
+        preview.Hide();
+    }
     public static IEnumerator Run(Action<bool,string> check)
     {
         var session=AppSession.Instance;string previous=session.Data.account,test="day-hours-runtime-"+Guid.NewGuid().ToString("N");session.SwitchAccount(test);yield return null;
         var nav=AppNavigation.Instance;var cal=Object.FindFirstObjectByType<CalendarController>(FindObjectsInactive.Include);var old=Object.FindFirstObjectByType<ScheduleWorkbench>();var hours=WorkedHoursEditor.Instance;var popup=cal.GetComponentInChildren<DayDetailsPopup>(true);var family=Object.FindFirstObjectByType<FamilyWorkbench>();
         string key=DateKeyUtility.ToDateKey(DateTime.Today.AddDays(1));session.CurrentGroup.pattern=new List<int>{2};session.UpdateDayDetails(key,"Shared note","Hidden person");session.SaveLocal();
+        bool placementChecked=false;
         foreach(ThemeManager.Theme theme in Enum.GetValues(typeof(ThemeManager.Theme)))
         {
             session.UpdateDayDetails(key,"Shared note","Hidden person");session.SaveLocal();ThemeManager.Apply(theme);nav.ShowCalendar();cal.OpenDate(DateKeyUtility.FromDateKey(key));yield return null;yield return null;
+            if(!placementChecked)
+            {
+                placementChecked=true;
+                var placement=CheckFloatingPreview(cal,check);while(placement.MoveNext())yield return placement.Current;
+                cal.OpenDate(DateKeyUtility.FromDateKey(key));yield return null;yield return null;
+            }
             var preview=cal.preview;check(preview.gameObject.activeSelf,"ordinary date opens compact preview "+theme);
             var detailsRect=(RectTransform)preview.detailsButton.transform;check(detailsRect.rect.width<preview.card.rect.width*.5f&&detailsRect.rect.height>=108,"Details compact width and full touch target "+theme);
-            var alarmRect=(RectTransform)preview.alarmButton.transform;check(alarmRect.rect.height>=108&&alarmRect.anchorMin.x==1,"Add Alarm beneath top-right close target "+theme);
+            var alarmRect=(RectTransform)preview.alarmButton.transform;check(alarmRect.rect.height>=108&&alarmRect.anchorMin.x==0,"Add Alarm remains in the floating footer "+theme);
             var openHours=preview.GetComponentsInChildren<Button>().First(b=>b.name=="Preview hours");var click=Click(openHours,check,"preview hours");while(click.MoveNext())yield return null;
             check(hours.gameObject.activeSelf&&hours.DateKey==key,"hours receives selected calendar date "+theme);hours.input.text="11.5";var save=hours.GetComponentsInChildren<Button>().First(b=>b.name=="Save");click=Click(save,check,"hours Save");while(click.MoveNext())yield return null;
             check(!hours.gameObject.activeSelf&&!preview.gameObject.activeSelf&&!nav.BlocksCalendarGesture&&WorkedHoursStore.Get(key)?.hundredths==1150,"saving hours persists and returns to the calendar without a modal blocker "+theme);
