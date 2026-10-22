@@ -70,20 +70,20 @@ Android owns a durable device delivery ledger in its private AtomicFile. Unity s
 
 The native queue covers 45 days, up to 128 occurrences, replenishes after each firing and every 12 hours, and rebuilds after reboot, app replacement and clock/zone changes. Ringing stops after 10 minutes. Dismiss stops only the ringing occurrence; Snooze reschedules it with its effective snooze duration. Open Calendar dismisses the specific actively ringing occurrence before launching Unity and preserves simultaneous alarms and future repeats. Open Calendar from a non-ringing upcoming notice preserves its future delivery. Upcoming "Dismiss this alarm" skips only that occurrence. Swiping an upcoming notice does not skip it. Future skip Undo is available in Events & alarms, including after restarting.
 
-Alarm volume, notification channel settings and Do Not Disturb remain under Android control. Force-stopping an app prevents Android delivery until it is launched again. ShiftCal does not request full-screen presentation or show Activities above the keyguard. Native ringing continues while locked; normal device unlock gives access to Dismiss/Snooze and calendar content.
+Alarm volume, notification channel settings and Do Not Disturb remain under Android control. Force-stopping an app prevents Android delivery until it is launched again. Active audible alarms request Android's full-screen presentation and may wake/show native Dismiss/Snooze controls above the keyguard. The calendar and non-ringing alarm details require normal unlock. Android 14+ full-screen access and the existing audible notification channel can be opened from Events & alarms → Alarm readiness. Missing full-screen access is reported separately and does not disable scheduled ringing. See [FULL_SCREEN_ALARMS.md](FULL_SCREEN_ALARMS.md).
 
 ## Local verification completed
 
-The subsequent calendar image-export update and latest APK validation are recorded in [CALENDAR_IMAGE_EXPORT.md](CALENDAR_IMAGE_EXPORT.md); the following counts describe the earlier quality-of-life update.
+The calendar image-export update is recorded in [CALENDAR_IMAGE_EXPORT.md](CALENDAR_IMAGE_EXPORT.md), and current alarm/APK validation is in [FULL_SCREEN_ALARMS.md](FULL_SCREEN_ALARMS.md); the following counts describe the earlier quality-of-life update.
 
 The October 16 update passed 1,974 focused Unity assertions, 599 play-mode assertions with zero errors, 46 native tests and lint with zero errors (three existing dependency warnings). The integrated run generated 738 current-run Canvas renders across all three themes at 360x640, 393x851 and 412x915. Local demo-project emulators passed 77 security/revision/tombstone assertions, including both rules configurations, owner/member permissions, offline pending writes, conflicts and private-data rejection. No production data was accessed. See [QUALITY_OF_LIFE.md](QUALITY_OF_LIFE.md) for coverage and remaining acceptance.
 
-A non-development ARM64 APK is built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Current artifact details are recorded in [CALENDAR_IMAGE_EXPORT.md](CALENDAR_IMAGE_EXPORT.md). No Android device is attached. Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior remain unverified on a phone.
+A non-development ARM64 APK is built at `Logs/Android/ShiftCal-ui.apk` using the existing package and debug signing configuration. Current artifact details are recorded in [FULL_SCREEN_ALARMS.md](FULL_SCREEN_ALARMS.md). Real Google/cloud login, two-account sharing, lock-screen delivery, sound/vibration and OEM permission/battery behavior require physical-phone acceptance.
 
 ## Phone verification later
 
-- Allow notifications and exact-alarm access from Events & alarms; confirm the readiness view reports the actual permissions.
-- Use Test alarm, close the app normally and lock the screen. Verify sound/vibration, Dismiss, and Snooze.
+- Allow notifications, exact-alarm access and Full-screen alarms from Events & alarms → Alarm readiness; check the existing audible channel's high importance/pop-up setting. Confirm the readiness view reports the actual permissions.
+- Use Test alarm, close the app normally and lock the screen. Verify that the screen wakes into native alarm controls with sound/vibration, and Dismiss/Snooze work without unlocking. Open Calendar must still ask for normal device unlock.
 - Verify native date/time dialogs initialize correctly, Cancel preserves values, OK saves, device 12/24-hour formatting works and no keyboard opens. Test keyboard insets with title/notes focused and Save above the gesture region.
 - Create one Day-12 Wake Up definition from Day Details, test fixed and relative timing (including a previous-day delivery), confirm one definition card and check per-occurrence delivery edits/skips.
 - Change global notice and snooze preferences, confirm native reconciliation, disable notices while keeping the real alarm and ensure Test alarm has no immediate advance notice.

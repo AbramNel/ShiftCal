@@ -108,7 +108,7 @@ public class NativeAlarmTest {
         Intent intent=new Intent(context,AlarmActivity.class).putExtra("id","test:screen").putExtra("account","test-account");
         var controller=Robolectric.buildActivity(AlarmActivity.class,intent).setup();AlarmActivity activity=controller.get();
         android.view.ViewGroup content=activity.findViewById(android.R.id.content);
-        assertNotNull(findText(content,"Wake Up"));assertNotNull(findText(content,android.text.format.DateFormat.getTimeFormat(activity).format(new java.util.Date(o.getLong("at")))));
+        assertNotNull(findText(content,"ShiftCal alarm"));assertNotNull(findText(content,android.text.format.DateFormat.getTimeFormat(activity).format(new java.util.Date(o.getLong("at")))));
         assertEquals(android.graphics.Color.parseColor("#F4F3EF"),activity.getWindow().getStatusBarColor());
         findText(content,"Open Calendar").performClick();assertEquals("dismissed",AlarmStore.account(AlarmStore.read(context)).getJSONObject("ledger").getJSONObject("test:screen").getString("state"));assertTrue(activity.isFinishing());controller.destroy();
     }

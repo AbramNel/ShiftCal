@@ -2,6 +2,8 @@
 
 Calendar sharing and Save Image are implemented on main. The saved scene and permanent scene builder contain the working header controls; no manual wiring is required. `HANDOFF.md` remains empty.
 
+The subsequent [October 22 full-screen alarm update](FULL_SCREEN_ALARMS.md) records the current APK and intentionally adds full-screen alarm access. The APK permissions, validation counts and hashes below describe this earlier export build.
+
 ## Use
 
 Navigate to the desired month and tap **Share** beside the family filter. ShiftCal generates the image locally and opens **Share ShiftCal Calendar**, Android's native chooser. Choose any installed PNG-compatible destination and complete the send there. Opening or canceling the chooser never reports that a message was sent.

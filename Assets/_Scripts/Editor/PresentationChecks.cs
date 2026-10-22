@@ -26,8 +26,8 @@ public static class PresentationChecks
         try
         {
             typeof(AppSession).GetProperty("Data").SetValue(session,data);typeof(DeviceCalendarStore).GetProperty("State").SetValue(null,device);session.CurrentGroup=data.group;
-            string manifest=File.ReadAllText("Assets/Plugins/Android/ShiftCal.androidlib/src/main/AndroidManifest.xml");check(!manifest.Contains("USE_FULL_SCREEN_INTENT")&&!manifest.Contains("showWhenLocked")&&!manifest.Contains("turnScreenOn"),"manifest has no lock-screen takeover permission or Activity attributes");
-            check(!Object.FindObjectsByType<Text>(FindObjectsInactive.Include,FindObjectsSortMode.None).Any(t=>t.text=="Full-screen alarms"),"saved settings no longer request full-screen alarm access");
+            string manifest=File.ReadAllText("Assets/Plugins/Android/ShiftCal.androidlib/src/main/AndroidManifest.xml");check(manifest.Contains("USE_FULL_SCREEN_INTENT")&&!manifest.Contains("showWhenLocked")&&!manifest.Contains("turnScreenOn"),"full-screen permission declared; only verified ringing state enables Activity presentation programmatically");
+            check(Object.FindObjectsByType<Text>(FindObjectsInactive.Include,FindObjectsSortMode.None).Any(t=>t.text=="Full-screen alarms"),"saved readiness panel exposes full-screen alarm permission settings");
             check(hours.hoursIcon!=null&&File.Exists("Assets/_UI/WorkedHoursTimesheet.png"),"committed timesheet sprite and generator wired");
             foreach(var cell in calendar.GetComponentsInChildren<CalendarDayCell>(true))check(cell.workedClock.sprite==hours.hoursIcon&&cell.workedClock.sprite!=cell.transform.Find("Alarm indicator").GetComponent<Image>().sprite,"all calendar hours use distinct timesheet sprite");
             foreach(var size in new[]{new Vector2Int(360,640),new Vector2Int(393,851),new Vector2Int(412,915)})
@@ -58,7 +58,7 @@ public static class PresentationChecks
                         var title=calendar.transform.Find("Month Bar/Month summary/Month Label").GetComponent<RectTransform>();check(!World(title).Overlaps(World((RectTransform)calendar.monthlyPill.transform)),"month and total have separate geometry "+context);
                         var grid=calendar.GetComponentInChildren<ResponsiveCalendarGrid>(true).GetComponent<GridLayoutGroup>();check(grid.cellSize.y*6+grid.spacing.y*5<=((RectTransform)grid.transform).rect.height+1,"all six calendar rows fit "+context);
                     }
-                    if(screen.StartsWith("Preview")){var pill=calendar.preview.hoursPill;check(pill.GetComponent<RectTransform>().rect.width<calendar.preview.card.rect.width*.65f&&pill.GetComponent<RectTransform>().rect.height>=132,"preview hours compact with comfortable touch target "+context);check(pill.icon.sprite==hours.hoursIcon,"preview uses timesheet sprite "+context);}
+                    if(screen.StartsWith("Preview")){var pill=calendar.preview.hoursPill;check(pill.GetComponent<RectTransform>().rect.width<calendar.preview.card.rect.width*.65f&&pill.GetComponent<RectTransform>().rect.height>=108,"preview hours compact with floating footer touch target "+context);check(pill.icon.sprite==hours.hoursIcon,"preview uses timesheet sprite "+context);}
                     if(screen.StartsWith("Agenda")){
                         var cards=work.agendaContent.GetComponentsInChildren<AgendaDayCard>();check(cards.All(c=>c.date.transform.position.y>c.entries.position.y),"agenda day headers precede entries "+context);
                         if(screen=="Agenda-empty")check(cards.Length==0,"empty agenda omits day cards "+context);if(screen=="Agenda-all-dates")check(cards.Length==7,"empty dates remain compact chronological rows "+context);

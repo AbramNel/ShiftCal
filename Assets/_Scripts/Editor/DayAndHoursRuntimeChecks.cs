@@ -47,7 +47,8 @@ public static class DayAndHoursRuntimeChecks
             foreach(var button in new[]{preview.detailsButton,preview.alarmButton,preview.hoursPill.button})
             {
                 var rect=BoundsIn((RectTransform)button.transform,preview.card);
-                check(preview.card.rect.Contains(rect.min)&&preview.card.rect.Contains(rect.max)&&rect.height>=108,"floating action stays inside the card with its touch target: "+button.name);
+                // Transforming a 108-unit target to world space and back can round just below 108.
+                check(preview.card.rect.Contains(rect.min)&&preview.card.rect.Contains(rect.max)&&rect.height>=108-.001f,"floating action stays inside the card with its touch target: "+button.name+" / card="+preview.card.rect.ToString("F5")+" action="+rect.ToString("F5"));
             }
         }
         preview.Hide();

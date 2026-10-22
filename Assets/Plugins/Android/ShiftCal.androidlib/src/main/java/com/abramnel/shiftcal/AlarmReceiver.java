@@ -8,7 +8,7 @@ public final class AlarmReceiver extends BroadcastReceiver {
             String action=i.getAction(),id=i.getStringExtra("id");
             synchronized(AlarmStore.LOCK){if(!AlarmStore.read(c).optString("account").equals(i.getStringExtra("account")))return;}
             if("reconcile".equals(action)){AlarmScheduler.reconcile(c);return;}
-            if("skip".equals(action)||"dismiss".equals(action)||"snooze".equals(action)){if(!LockScreenPrivacy.locked(c))AlarmScheduler.action(c,action,id);return;}
+            if("skip".equals(action)||"dismiss".equals(action)||"snooze".equals(action)){AlarmScheduler.notificationAction(c,action,id,i.getStringExtra("account"));return;}
             synchronized(AlarmStore.LOCK){
                 JSONObject root=AlarmStore.read(c);if(!root.optBoolean("active"))return;
                 JSONObject ledger=AlarmStore.account(root).getJSONObject("ledger"),occurrences=root.optJSONObject("occurrences");

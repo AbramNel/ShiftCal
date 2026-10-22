@@ -5,7 +5,7 @@ import android.content.Context;
 import android.os.*;
 import android.view.WindowManager;
 
-/** System keyguard remains authoritative for every Activity in this process. */
+/** The ringing alarm may show controls; the calendar still requires normal unlock. */
 final class LockScreenPrivacy implements Application.ActivityLifecycleCallbacks {
     private static Application installedFor;
     static boolean locked(Context context) {
@@ -17,9 +17,17 @@ final class LockScreenPrivacy implements Application.ActivityLifecycleCallbacks 
         apply(activity);
     }
     static void apply(Activity activity) {
-        if(Build.VERSION.SDK_INT>=27){activity.setShowWhenLocked(false);activity.setTurnScreenOn(false);}
-        activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-            |WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON|WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+        boolean ringing=activity instanceof AlarmActivity&&((AlarmActivity)activity).canShowOverLockScreen();
+        if(Build.VERSION.SDK_INT>=27){activity.setShowWhenLocked(ringing);activity.setTurnScreenOn(ringing);}
+        int presentation=WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED|WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
+        activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+        if(ringing){
+            activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            if(Build.VERSION.SDK_INT<27)activity.getWindow().addFlags(presentation);
+        }else{
+            activity.getWindow().clearFlags(presentation);
+            if(activity instanceof AlarmActivity)activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
     public void onActivityCreated(Activity a,Bundle state){apply(a);}
     public void onActivityStarted(Activity a){apply(a);}

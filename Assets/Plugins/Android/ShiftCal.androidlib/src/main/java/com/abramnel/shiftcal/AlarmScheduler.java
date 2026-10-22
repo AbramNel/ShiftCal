@@ -97,6 +97,22 @@ final class AlarmScheduler {
             action(c,action,id);
         }
     }
+    static boolean checkedRingingAction(Context c,String action,String id,String expectedAccount) throws Exception {
+        synchronized(AlarmStore.LOCK){
+            if(!("dismiss".equals(action)||"snooze".equals(action))||!AlarmPresentation.ringing(c,id,expectedAccount))return false;
+            action(c,action,id);return true;
+        }
+    }
+    static void notificationAction(Context c,String action,String id,String expectedAccount) throws Exception {
+        synchronized(AlarmStore.LOCK){
+            if(!AlarmStore.read(c).optString("account").equals(expectedAccount))return;
+            if(checkedRingingAction(c,action,id,expectedAccount))return;
+            if(LockScreenPrivacy.locked(c))return;
+            JSONObject entry=AlarmStore.account(AlarmStore.read(c)).getJSONObject("ledger").optJSONObject(id);
+            // A stale Snooze/Dismiss action cannot resurrect or cancel a snoozed delivery.
+            if("skip".equals(action)||"dismiss".equals(action)&&entry!=null&&"delivered".equals(entry.optString("state")))checkedAction(c,action,id,expectedAccount);
+        }
+    }
     static void action(Context c,String action,String id) throws Exception {
         synchronized(AlarmStore.LOCK){
             JSONObject root=AlarmStore.read(c), account=AlarmStore.account(root), ledger=account.getJSONObject("ledger");

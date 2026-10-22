@@ -1,5 +1,7 @@
 # Calendar presentation and Android privacy — October 15, 2026
 
+Historical report: the [October 22 full-screen alarm update](FULL_SCREEN_ALARMS.md) supersedes the restrictions below for actively ringing audible alarms. Those alarms now request full-screen presentation with Dismiss/Snooze over the lock screen. Calendar content and non-ringing details still require unlock. APK/certificate details below describe the October 15 artifact, not the current build.
+
 Implemented in the existing `main` checkout, starting at `2785a7afd27b91ffbb167618d27a72ca8cdb6934`. The saved scene, prefabs and permanent scene builder contain the same wiring; no manual setup is required.
 
 ## Calendar and Agenda

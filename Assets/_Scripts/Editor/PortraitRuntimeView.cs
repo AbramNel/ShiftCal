@@ -20,6 +20,9 @@ public static class PortraitRuntimeView
     }
     public static void Restore()
     {
-        if(!SessionState.GetBool(Key+"active",false))return;SessionState.SetBool(Key+"active",false);var group=Group(Sizes(),SessionState.GetString(Key+"group","Standalone"));var view=EditorWindow.GetWindow(Type("GameView"),false,"Game",false);view.GetType().GetProperty("selectedSizeIndex",Instance).SetValue(view,SessionState.GetInt(Key+"previous",0));group.GetType().GetMethod("RemoveCustomSize",Instance).Invoke(group,new object[]{SessionState.GetInt(Key+"custom",0)});
+        if(!SessionState.GetBool(Key+"active",false))return;SessionState.SetBool(Key+"active",false);var group=Group(Sizes(),SessionState.GetString(Key+"group","Standalone"));var view=EditorWindow.GetWindow(Type("GameView"),false,"Game",false);view.GetType().GetProperty("selectedSizeIndex",Instance).SetValue(view,SessionState.GetInt(Key+"previous",0));
+        // RemoveCustomSize takes the total index, including built-in resolutions.
+        int builtIn=(int)group.GetType().GetMethod("GetBuiltinCount",Instance).Invoke(group,null);
+        group.GetType().GetMethod("RemoveCustomSize",Instance).Invoke(group,new object[]{builtIn+SessionState.GetInt(Key+"custom",0)});
     }
 }

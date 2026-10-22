@@ -11,27 +11,40 @@ import android.widget.*;
 import org.json.*;
 import java.util.Date;
 
-/** Native alarm controls, available only after the system keyguard permits access. */
+/** Native wake-up controls; calendar navigation still uses normal system unlock. */
 public final class AlarmActivity extends Activity {
     private String id,account;
     private int background,surface,text,muted,accent,onAccent;
     private boolean ringing;
+    private boolean presentedRinging;
+    private final Handler updates=new Handler(Looper.getMainLooper());
+    private final Runnable refresh=()->refreshState();
     public void onCreate(Bundle state){super.onCreate(state);
         LockScreenPrivacy.install(this);
         render();
     }
-    @Override protected void onResume(){super.onResume();LockScreenPrivacy.apply(this);render();}
-    @Override protected void onPause(){setContentView(new FrameLayout(this));super.onPause();}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);render();}
+    @Override protected void onResume(){super.onResume();LockScreenPrivacy.apply(this);render();updates.removeCallbacks(refresh);updates.postDelayed(refresh,500);}
+    @Override protected void onPause(){updates.removeCallbacks(refresh);setContentView(new FrameLayout(this));super.onPause();}
+    @Override protected void onDestroy(){updates.removeCallbacks(refresh);super.onDestroy();}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);presentedRinging=false;LockScreenPrivacy.apply(this);render();}
+    boolean canShowOverLockScreen(){return getIntent()!=null&&AlarmPresentation.ringing(this,getIntent().getStringExtra("id"),getIntent().getStringExtra("account"));}
+    private void refreshState(){
+        if(isFinishing())return;
+        if(!currentAccount()||presentedRinging&&!canShowOverLockScreen()){LockScreenPrivacy.apply(this);finish();return;}
+        if(!presentedRinging&&canShowOverLockScreen()){LockScreenPrivacy.apply(this);render();}
+        updates.postDelayed(refresh,500);
+    }
     private void render(){
-        if(LockScreenPrivacy.locked(this)){setContentView(new FrameLayout(this));return;}
         id=getIntent().getStringExtra("id");account=getIntent().getStringExtra("account");
         if(id==null||!currentAccount()){finish();return;}
+        boolean active=canShowOverLockScreen();
+        if(presentedRinging&&!active){LockScreenPrivacy.apply(this);finish();return;}
+        if(LockScreenPrivacy.locked(this)&&!active){setContentView(new FrameLayout(this));return;}
         JSONObject occurrence=null;int theme=0;
         try{synchronized(AlarmStore.LOCK){JSONObject root=AlarmStore.read(this),entry=AlarmStore.account(root).getJSONObject("ledger").optJSONObject(id);
             JSONObject queue=root.optJSONObject("occurrences");occurrence=queue==null?null:queue.optJSONObject(id);
             if(entry!=null&&entry.optJSONObject("occurrence")!=null)occurrence=entry.getJSONObject("occurrence");
-            ringing=AlarmPolicy.shouldDismissOnOpen(entry);theme=root.optInt("theme");
+            ringing=active;presentedRinging|=ringing;theme=root.optInt("theme");
         }}catch(Exception ignored){}
         if(occurrence==null){finish();return;}
         String[][] palettes={{"#171B22","#232933","#F2F5F9","#ADB9CA","#9BD5FF","#102237"},
@@ -55,15 +68,28 @@ public final class AlarmActivity extends Activity {
         label(column,ringing?(id.startsWith("shift:")?"SHIFT ALARM":"EVENT ALARM"):"UPCOMING ALARM",14,muted,0,16,true);
         label(column,android.text.format.DateFormat.getTimeFormat(this).format(new Date(occurrence.optLong("at"))),64,text,0,6,true);
         label(column,android.text.format.DateFormat.getMediumDateFormat(this).format(new Date(occurrence.optLong("at"))),16,muted,0,22,false);
-        label(column,occurrence.optString("title"),28,text,0,8,true);
-        String subtitle=occurrence.optString("subtitle");if(!subtitle.isEmpty())label(column,subtitle,16,muted,0,26,false);
+        // Keep the ringing surface generic, even if keyguard appears without an Activity pause.
+        label(column,ringing?"ShiftCal alarm":occurrence.optString("title"),28,text,0,8,true);
+        String subtitle=ringing?"":occurrence.optString("subtitle");if(!subtitle.isEmpty())label(column,subtitle,16,muted,0,26,false);
         else label(column,"ShiftCal",16,muted,0,26,false);
-        button(column,ringing?"Dismiss":"Skip this alarm",true,()->perform(ringingNow()?"dismiss":"skip"));
+        button(column,ringing?"Dismiss":"Skip this alarm",true,()->perform(ringing?"dismiss":"skip"));
         if(ringing)button(column,"Snooze \u2022 "+occurrence.optInt("snoozeMinutes",10)+" min",false,()->perform("snooze"));
         TextView open=label(column,"Open Calendar",17,accent,20,0,true);open.setPadding(dp(12),dp(16),dp(12),dp(16));open.setOnClickListener(v->openCalendar());
     }
-    private void perform(String action){if(LockScreenPrivacy.locked(this))return;try{AlarmScheduler.checkedAction(this,action,id,account);finish();}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
+    private void perform(String action){try{
+        if(canShowOverLockScreen())AlarmScheduler.checkedRingingAction(this,"skip".equals(action)?"dismiss":action,id,account);
+        else if(!LockScreenPrivacy.locked(this)&&!presentedRinging&&"skip".equals(action))AlarmScheduler.checkedAction(this,action,id,account);
+        finish();
+    }catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
     private void openCalendar(){
+        if(LockScreenPrivacy.locked(this)){
+            ((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).requestDismissKeyguard(this,new KeyguardManager.KeyguardDismissCallback(){
+                @Override public void onDismissSucceeded(){if(!isFinishing()&&!LockScreenPrivacy.locked(AlarmActivity.this))openCalendarUnlocked();}
+            });return;
+        }
+        openCalendarUnlocked();
+    }
+    private void openCalendarUnlocked(){
         if(LockScreenPrivacy.locked(this))return;
         try{
             AlarmScheduler.prepareOpen(this,id,account);
@@ -71,7 +97,6 @@ public final class AlarmActivity extends Activity {
             if(launch!=null){launch.putExtra("shiftcalOccurrence",id).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);startActivity(launch);}finish();
         }catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
     }
-    private boolean ringingNow(){try{synchronized(AlarmStore.LOCK){return AlarmPolicy.shouldDismissOnOpen(AlarmStore.account(AlarmStore.read(this)).getJSONObject("ledger").optJSONObject(id));}}catch(Exception e){return false;}}
     boolean currentAccount(){try{synchronized(AlarmStore.LOCK){return AlarmStore.read(this).optString("account").equals(getIntent().getStringExtra("account"));}}catch(Exception e){return false;}}
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private LinearLayout.LayoutParams rowParams(int width,int height,int top,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(width<0?width:dp(width),height<0?height:dp(height));p.setMargins(0,dp(top),0,dp(bottom));p.gravity=Gravity.CENTER;return p;}

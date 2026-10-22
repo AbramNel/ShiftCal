@@ -1,6 +1,6 @@
 # Quality-of-life update — October 16, 2026
 
-This report describes the completed quality-of-life update. [Calendar image export](CALENDAR_IMAGE_EXPORT.md) records the subsequent feature, latest validation and current APK verification.
+This report describes the completed quality-of-life update. [Calendar image export](CALENDAR_IMAGE_EXPORT.md) records the subsequent export feature. [Full-screen alarms](FULL_SCREEN_ALARMS.md) records the current alarm behavior and APK verification, superseding this report's preserved lock-screen policy for actively ringing audible alarms.
 
 Implemented directly in the existing `main` checkout, starting at `f3f232a45dc93585020f5013fd0ddc5d5ac8f4c4`. The saved scene, prefabs, sprites and permanent scene builder are integrated; no manual scene wiring is needed.
 
